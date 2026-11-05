@@ -1,0 +1,82 @@
+﻿:root {
+  color-scheme: dark;
+  --text: #eeeeef;
+  --muted: #aaa6ae;
+  --border: #ffffff16;
+  font-family:
+    Inter,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+  font-size: 13px;
+  color: var(--text);
+  background: #09090b;
+  font-synthesis: none;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  min-width: 280px;
+}
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  color: var(--text);
+  background: #ffffff06;
+  padding: 0 12px;
+  font: inherit;
+  cursor: pointer;
+  transition:
+    background 160ms,
+    border-color 160ms;
+}
+button:hover:not(:disabled) {
+  background: #ffffff10;
+  border-color: #ffffff35;
+}
+button:disabled {
+  opacity: 0.28;
+  cursor: default;
+}
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid #e5a18d;
+  outline-offset: 4px;
+}
+button.icon-button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  flex-shrink: 0;
+}
+button.quiet {
+  background: transparent;
+}
+button.primary {
+  background: linear-gradient(110deg, #ffffff0c, #ae483114);
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+@media (pointer: coarse) {
+  button.icon-button {
+    width: 36px;
+    height: 36px;
+  }
+}
