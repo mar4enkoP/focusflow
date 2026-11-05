@@ -1,20 +1,71 @@
-﻿import { afterEach, describe, it, expect } from 'vitest'
+import { nextTick } from 'vue'
+import { afterEach, describe, it, expect } from 'vitest'
 import { createPinia } from 'pinia'
 import { mount } from '@vue/test-utils'
 import App from '../App.vue'
+import { useTimerStore } from '../stores/timer'
 import { useTasksStore } from '../stores/tasks'
 const wrappers: ReturnType<typeof mount>[] = []
 function setup() {
   const pinia = createPinia()
   const wrapper = mount(App, { global: { plugins: [pinia] }, attachTo: document.body })
   wrappers.push(wrapper)
-  return { wrapper, store: useTasksStore(pinia) }
+  return { wrapper, store: useTasksStore(pinia), timer: useTimerStore(pinia) }
 }
 afterEach(() => {
   wrappers.forEach((w) => w.unmount())
   wrappers.length = 0
 })
 describe('task manager', () => {
+  it('opens focus without starting, hides empty content, and preserves editing', async () => {
+    const { wrapper, store, timer } = setup()
+    await wrapper.get('#task-title').setValue('First task')
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.find('.empty').exists()).toBe(false)
+    expect(wrapper.findAll('[aria-label="Add a task"]')).toHaveLength(1)
+    expect(wrapper.text()).not.toContain('Create a task')
+    await wrapper.get('.start-focus').trigger('click')
+    expect(timer.selectedId).toBe(store.tasks[0]!.id)
+    expect(timer.state).toBe('ready')
+    expect(wrapper.get('[role="timer"]').text()).toBe('25:00')
+    expect(wrapper.text()).toContain('Planned \u00b7 25 min')
+    await wrapper.get('[aria-label="Start or resume timer"]').trigger('click')
+    expect(timer.state).toBe('running')
+    await wrapper.get('[aria-label="Pause timer"]').trigger('click')
+    expect(timer.state).toBe('paused')
+    await wrapper.get('[aria-label="Open task panel"]').trigger('click')
+    expect(wrapper.find('.empty').exists()).toBe(false)
+    await wrapper.get('[aria-label="Edit First task"]').trigger('click')
+    await wrapper.get('#task-title').setValue('Edited task')
+    await wrapper.get('form').trigger('submit')
+    expect(store.tasks[0]!.title).toBe('Edited task')
+    await wrapper.get('.start-focus').trigger('click')
+    expect(timer.state).toBe('paused')
+    expect(wrapper.text()).toContain('Edited task')
+  })
+  it('skips completed tasks and retains an explicit selection', async () => {
+    const { wrapper, store, timer } = setup()
+    store.save({ title: 'Done', duration: 5, category: 'Work' })
+    store.save({ title: 'Next', duration: 10, category: 'Work' })
+    store.save({ title: 'Chosen', duration: 15, category: 'Work' })
+    store.toggle(store.tasks[0]!.id)
+    await wrapper.get('form').trigger('keydown', { key: 'Escape' })
+    await wrapper.get('.start-focus').trigger('click')
+    expect(timer.task?.title).toBe('Next')
+    await wrapper.get('[aria-label="Open task panel"]').trigger('click')
+    await wrapper.get('[aria-label="Focus on Chosen"]').trigger('click')
+    await wrapper.get('[aria-label="Open task panel"]').trigger('click')
+    await wrapper.get('.start-focus').trigger('click')
+    expect(timer.task?.title).toBe('Chosen')
+    expect(timer.state).toBe('ready')
+    store.tasks.forEach((task) => {
+      if (!task.completed) store.toggle(task.id)
+    })
+    await nextTick()
+    await wrapper.get('[aria-label="Back to tasks"]').trigger('click')
+    expect(wrapper.find('.empty').exists()).toBe(false)
+    expect(wrapper.find('.start-focus').exists()).toBe(false)
+  })
   it('validates fields inline and keeps entered values', async () => {
     const { wrapper, store } = setup()
     expect(wrapper.text()).toContain('Add your first task')

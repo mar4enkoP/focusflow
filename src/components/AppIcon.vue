@@ -15,6 +15,11 @@ const paths: Record<string, string> = {
   list: 'M9 6h12M9 12h12M9 18h12M3 6h1m-1 6h1m-1 6h1',
   clock: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18m0 4v5l3 2',
   brand: 'M2 9c6-12 10 12 20 0M2 16c6-12 10 12 20 0',
+  reset: 'M8 4v5H3 M8 5a8 8 0 1 1-4 8',
+  play: 'm8 4 12 8-12 8Z',
+  pause: 'M6 4h4v16H6z M14 4h4v16h-4z',
+  next: 'm5 5 11 7-11 7Z M19 5v14',
+  layers: 'm3 7 9-5 9 5-9 5-9-5m0 5 9 5 9-5M3 17l9 5 9-5',
 }
 </script>
 <template>

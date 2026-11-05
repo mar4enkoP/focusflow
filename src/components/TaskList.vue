@@ -2,7 +2,7 @@
 import { useTasksStore, type Task } from '@/stores/tasks'
 import AppIcon from './AppIcon.vue'
 const store = useTasksStore()
-defineEmits<{ edit: [task: Task] }>()
+defineEmits<{ edit: [task: Task]; select: [id: string] }>()
 </script>
 <template>
   <ol class="tasks" aria-label="Task list">
@@ -20,7 +20,13 @@ defineEmits<{ edit: [task: Task] }>()
       />
       <AppIcon :name="task.category" />
       <div class="task-info">
-        <span class="title">{{ task.title }}</span
+        <button
+          class="select-task"
+          :disabled="task.completed"
+          :aria-label="`Focus on ${task.title}`"
+          @click="$emit('select', task.id)"
+        >
+          {{ task.title }}</button
         ><span class="metadata"
           >{{ task.category }} · {{ task.duration }} min<span v-if="task.completed">
             · Completed</span
@@ -132,5 +138,15 @@ svg {
   .row-actions {
     margin-left: 48px;
   }
+}
+.select-task {
+  height: auto;
+  min-height: 28px;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  justify-content: flex-start;
+  overflow-wrap: anywhere;
 }
 </style>
