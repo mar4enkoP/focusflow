@@ -1,4 +1,4 @@
-import { nextTick } from 'vue'
+﻿import { nextTick } from 'vue'
 import { afterEach, describe, it, expect } from 'vitest'
 import { createPinia } from 'pinia'
 import { mount } from '@vue/test-utils'
@@ -23,10 +23,12 @@ describe('task manager', () => {
     await wrapper.get('form').trigger('submit')
     expect(wrapper.find('.empty').exists()).toBe(false)
     expect(wrapper.findAll('[aria-label="Add a task"]')).toHaveLength(1)
+    expect(wrapper.get('[aria-label="Add a task"]').text()).toBe('')
     expect(wrapper.text()).not.toContain('Create a task')
     await wrapper.get('.start-focus').trigger('click')
     expect(timer.selectedId).toBe(store.tasks[0]!.id)
     expect(timer.state).toBe('ready')
+    expect(wrapper.get('.dock-time').text()).toContain('0% \u00b7')
     expect(wrapper.get('[role="timer"]').text()).toBe('25:00')
     expect(wrapper.text()).toContain('Planned \u00b7 25 min')
     await wrapper.get('[aria-label="Start or resume timer"]').trigger('click')
@@ -58,6 +60,7 @@ describe('task manager', () => {
     await wrapper.get('.start-focus').trigger('click')
     expect(timer.task?.title).toBe('Chosen')
     expect(timer.state).toBe('ready')
+    expect(wrapper.get('.dock-time').text()).toContain('0% \u00b7')
     store.tasks.forEach((task) => {
       if (!task.completed) store.toggle(task.id)
     })
@@ -85,18 +88,23 @@ describe('task manager', () => {
     const { wrapper, store } = setup()
     await wrapper.get('#task-title').setValue('First')
     await wrapper.get('#task-duration').setValue('40')
-    await wrapper.get('#task-category').setValue('Reading')
+    await wrapper.get('#task-category').trigger('click')
+    await wrapper
+      .findAll('[role="option"]')
+      .find((option) => option.text().includes('Reading'))!
+      .trigger('click')
     await wrapper.get('form').trigger('submit')
     const id = store.tasks[0]!.id
-    expect(wrapper.get('[aria-label="Task list"]').text()).toContain('Reading · 40 min')
+    expect(wrapper.get('[aria-label="Task list"]').text()).toContain('40 min')
     await wrapper.get('[aria-label="Add a task"]').trigger('click')
     await wrapper.get('#task-title').setValue('Second')
     await wrapper.get('form').trigger('submit')
-    await wrapper.get('[aria-label="Move Second up"]').trigger('click')
+    await wrapper
+      .get('[aria-label="Reorder Second; use arrow keys"]')
+      .trigger('keydown', { key: 'ArrowUp' })
     expect(store.tasks[0]!.title).toBe('Second')
-    expect(wrapper.get('[aria-label="Move Second up"]').attributes('disabled')).toBeDefined()
     await wrapper.get('[aria-label="Complete First"]').setValue(true)
-    expect(wrapper.text()).toContain('Completed')
+    expect(wrapper.text()).toContain('40 min \u00b7 Completed')
     expect(store.remaining).toBe(1)
     await wrapper.get('[aria-label="Complete First"]').setValue(false)
     expect(store.remaining).toBe(2)
@@ -104,7 +112,11 @@ describe('task manager', () => {
     expect((wrapper.get('#task-title').element as HTMLInputElement).value).toBe('First')
     await wrapper.get('#task-title').setValue('Updated')
     await wrapper.get('#task-duration').setValue('15')
-    await wrapper.get('#task-category').setValue('Health')
+    await wrapper.get('#task-category').trigger('click')
+    await wrapper
+      .findAll('[role="option"]')
+      .find((option) => option.text().includes('Health'))!
+      .trigger('click')
     await wrapper.get('form').trigger('submit')
     expect(store.tasks.find((t) => t.id === id)).toMatchObject({
       title: 'Updated',

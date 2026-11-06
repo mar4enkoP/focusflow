@@ -1,17 +1,68 @@
 ﻿<script setup lang="ts">
+import { ref } from 'vue'
 import { useTasksStore, type Task } from '@/stores/tasks'
 import AppIcon from './AppIcon.vue'
 const store = useTasksStore()
+const dragging = ref<string>()
+const target = ref<string>()
+function endDrag() {
+  dragging.value = undefined
+  target.value = undefined
+}
+function drop(id: string) {
+  const from = store.tasks.findIndex((t) => t.id === dragging.value)
+  const to = store.tasks.findIndex((t) => t.id === id)
+  if (from >= 0 && to >= 0) {
+    while (store.tasks.findIndex((t) => t.id === dragging.value) !== to)
+      store.move(dragging.value!, from < to ? 1 : -1)
+  }
+  dragging.value = undefined
+  target.value = undefined
+}
+function drag(event: DragEvent, id: string) {
+  dragging.value = id
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', id)
+  }
+}
 defineEmits<{ edit: [task: Task]; select: [id: string] }>()
 </script>
 <template>
   <ol class="tasks" aria-label="Task list">
     <li
-      v-for="(task, index) in store.tasks"
+      v-for="task in store.tasks"
       :key="task.id"
-      :class="{ completed: task.completed }"
+      :class="{
+        completed: task.completed,
+        dragging: dragging === task.id,
+        target: target === task.id,
+      }"
       :data-task-id="task.id"
+      draggable="true"
+      @dragstart="drag($event, task.id)"
+      @dragover.prevent="target = task.id"
+      @drop.prevent="drop(task.id)"
+      @dragend="endDrag"
     >
+      <button
+        class="drag-handle"
+        :aria-label="`Reorder ${task.title}; use arrow keys`"
+        title="Drag to reorder; Arrow keys to move"
+        @keydown.up.prevent="store.move(task.id, -1)"
+        @keydown.down.prevent="store.move(task.id, 1)"
+      >
+        <svg viewBox="0 0 16 20" width="16" height="20" aria-hidden="true">
+          <g fill="currentColor">
+            <circle cx="5" cy="5" r="1" />
+            <circle cx="11" cy="5" r="1" />
+            <circle cx="5" cy="10" r="1" />
+            <circle cx="11" cy="10" r="1" />
+            <circle cx="5" cy="15" r="1" />
+            <circle cx="11" cy="15" r="1" />
+          </g>
+        </svg>
+      </button>
       <input
         type="checkbox"
         :checked="task.completed"
@@ -28,30 +79,10 @@ defineEmits<{ edit: [task: Task]; select: [id: string] }>()
         >
           {{ task.title }}</button
         ><span class="metadata"
-          >{{ task.category }} · {{ task.duration }} min<span v-if="task.completed">
-            · Completed</span
-          ></span
+          >{{ task.duration }} min<span v-if="task.completed"> &middot; Completed</span></span
         >
       </div>
       <div class="row-actions">
-        <button
-          class="icon-button"
-          :aria-label="`Move ${task.title} up`"
-          title="Move up"
-          :disabled="index === 0"
-          @click="store.move(task.id, -1)"
-        >
-          <AppIcon name="up" />
-        </button>
-        <button
-          class="icon-button"
-          :aria-label="`Move ${task.title} down`"
-          title="Move down"
-          :disabled="index === store.tasks.length - 1"
-          @click="store.move(task.id, 1)"
-        >
-          <AppIcon name="down" />
-        </button>
         <button
           class="icon-button"
           :aria-label="`Edit ${task.title}`"
@@ -148,5 +179,62 @@ svg {
   padding: 0;
   justify-content: flex-start;
   overflow-wrap: anywhere;
+}
+.drag-handle {
+  border: 0;
+  padding: 0;
+  width: 18px;
+  flex-shrink: 0;
+  background: transparent;
+  color: #777278;
+  cursor: grab;
+  font-size: 20px;
+}
+.dragging {
+  opacity: 0.4;
+}
+.target {
+  box-shadow: inset 0 2px #dc8b73;
+}
+li {
+  padding: 12px 0;
+  min-height: 56px;
+  gap: 14px;
+}
+.task-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.select-task {
+  flex: 1;
+  font-size: 12px;
+}
+.metadata {
+  white-space: nowrap;
+  font-size: 11px;
+  margin: 0;
+}
+.row-actions {
+  opacity: 0;
+  transition: opacity 150ms;
+}
+li:hover .row-actions,
+li:focus-within .row-actions {
+  opacity: 1;
+}
+.completed .select-task {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+@media (hover: none) {
+  .row-actions {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .row-actions {
+    transition: none;
+  }
 }
 </style>

@@ -1,4 +1,4 @@
-﻿import { computed, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 import { useTasksStore } from './tasks'
 export const useTimerStore = defineStore('timer', () => {
@@ -81,7 +81,31 @@ export const useTimerStore = defineStore('timer', () => {
     },
     { flush: 'sync' },
   )
+  function snapshot() {
+    return {
+      selectedId: selectedId.value,
+      remaining: remaining.value,
+      budget: budget.value,
+      deadline: deadline.value,
+      state: state.value,
+      saved: [...saved.entries()],
+    }
+  }
+  function restore(value: ReturnType<typeof snapshot>) {
+    saved.clear()
+    for (const [id, session] of value.saved)
+      if (tasks.tasks.some((t) => t.id === id && !t.completed)) saved.set(id, session)
+    const active = tasks.tasks.find((t) => t.id === value.selectedId && !t.completed)
+    selectedId.value = active?.id
+    remaining.value = active ? value.remaining : 0
+    budget.value = active ? value.budget : 0
+    state.value = active ? value.state : 'ready'
+    deadline.value = active && value.state === 'running' ? value.deadline : undefined
+    sync()
+  }
   return {
+    snapshot,
+    restore,
     selectedId,
     task,
     remaining,

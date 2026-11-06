@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { nextTick, onMounted, reactive, ref } from 'vue'
+import { nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { categories, validateTask, type Task, type TaskInput } from '@/stores/tasks'
 import AppIcon from './AppIcon.vue'
 const props = defineProps<{ task?: Task }>()
@@ -13,6 +13,52 @@ const errors = ref({ title: '', duration: '', category: '' })
 const titleField = ref<HTMLInputElement>()
 const durationField = ref<HTMLInputElement>()
 const keyboardNavigation = ref(false)
+const categoryOpen = ref(false)
+const categoryRoot = ref<HTMLElement>()
+const categoryButton = ref<HTMLButtonElement>()
+const categoryIndex = ref(0)
+function closeCategory() {
+  categoryOpen.value = false
+}
+function chooseCategory(index: number) {
+  input.category = categories[index]!
+  closeCategory()
+  categoryButton.value?.focus()
+}
+async function openCategory() {
+  categoryOpen.value = true
+  categoryIndex.value = categories.indexOf(input.category)
+  await nextTick()
+  categoryRoot.value
+    ?.querySelectorAll<HTMLButtonElement>('[role="option"]')
+    [categoryIndex.value]?.focus()
+}
+function categoryKey(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    event.stopPropagation()
+    closeCategory()
+    categoryButton.value?.focus()
+    return
+  }
+  if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
+  event.preventDefault()
+  categoryIndex.value =
+    event.key === 'Home'
+      ? 0
+      : event.key === 'End'
+        ? categories.length - 1
+        : (categoryIndex.value + (event.key === 'ArrowDown' ? 1 : -1) + categories.length) %
+          categories.length
+  categoryRoot.value
+    ?.querySelectorAll<HTMLButtonElement>('[role="option"]')
+    [categoryIndex.value]?.focus()
+}
+function outsideCategory(event: PointerEvent) {
+  if (!categoryRoot.value?.contains(event.target as Node)) closeCategory()
+}
+onMounted(() => document.addEventListener('pointerdown', outsideCategory))
+onUnmounted(() => document.removeEventListener('pointerdown', outsideCategory))
 onMounted(() => titleField.value?.focus())
 async function submit() {
   errors.value = validateTask(input)
@@ -65,13 +111,50 @@ async function submit() {
       </div>
       <div>
         <label for="task-category">Category</label>
-        <div class="field">
-          <AppIcon :name="input.category === 'Work' ? 'layers' : input.category" /><select
+        <div
+          ref="categoryRoot"
+          class="category-picker"
+          @focusout="!categoryRoot?.contains($event.relatedTarget as Node) && closeCategory()"
+        >
+          <button
             id="task-category"
-            v-model="input.category"
+            ref="categoryButton"
+            type="button"
+            class="field category-trigger"
+            aria-label="Category"
+            aria-haspopup="listbox"
+            :aria-expanded="categoryOpen"
+            aria-controls="category-options"
+            @click="categoryOpen ? closeCategory() : openCategory()"
+            @keydown.down.prevent="openCategory()"
+            @keydown.up.prevent="openCategory()"
           >
-            <option v-for="category in categories" :key="category">{{ category }}</option></select
-          ><AppIcon class="select-chevron" name="down" />
+            <AppIcon :name="input.category" /><span>{{ input.category }}</span
+            ><AppIcon name="down" />
+          </button>
+          <div
+            v-if="categoryOpen"
+            id="category-options"
+            class="category-options"
+            role="listbox"
+            aria-label="Task category"
+            @keydown="categoryKey"
+          >
+            <button
+              v-for="(category, index) in categories"
+              :key="category"
+              type="button"
+              role="option"
+              :aria-selected="input.category === category"
+              :tabindex="categoryIndex === index ? 0 : -1"
+              @click="chooseCategory(index)"
+            >
+              <AppIcon :name="category" /><span>{{ category }}</span>
+              <span v-if="input.category === category" class="selected-mark" aria-hidden="true"
+                >&#10003;</span
+              >
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -207,5 +290,64 @@ select option {
   .details {
     grid-template-columns: 1fr;
   }
+}
+.category-picker {
+  position: relative;
+}
+.category-trigger {
+  width: 100%;
+  font-weight: 400;
+  text-align: left;
+  span {
+    flex: 1;
+  }
+  > svg:last-child {
+    width: 14px;
+    height: 14px;
+    color: var(--muted);
+  }
+}
+.category-options {
+  position: absolute;
+  top: calc(100% + 7px);
+  left: 0;
+  right: 0;
+  z-index: 10;
+  padding: 5px;
+  border: 1px solid #ffffff14;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #252125fa, #171519fa);
+  box-shadow:
+    0 12px 32px #0008,
+    inset 0 1px #ffffff06;
+  backdrop-filter: blur(18px);
+  button {
+    width: 100%;
+    gap: 10px;
+    height: 34px;
+    padding: 0 9px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    font-size: 12px;
+    font-weight: 400;
+    justify-content: flex-start;
+    svg {
+      width: 16px;
+      height: 16px;
+      color: var(--muted);
+    }
+    &:hover,
+    &:focus-visible {
+      background: #ffffff0c;
+    }
+    &[aria-selected='true'] {
+      background: #ffffff10;
+    }
+  }
+}
+.selected-mark {
+  margin-left: auto;
+  color: #eab5a7;
 }
 </style>

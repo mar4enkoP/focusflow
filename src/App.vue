@@ -6,6 +6,7 @@ import TaskForm from '@/components/TaskForm.vue'
 import TaskList from '@/components/TaskList.vue'
 import FocusTimer from '@/components/FocusTimer.vue'
 import FocusBackdrop from '@/components/FocusBackdrop.vue'
+import { persistenceNotice } from './persistence'
 import { useTimerStore } from '@/stores/timer'
 const timer = useTimerStore()
 let pulse: ReturnType<typeof setInterval> | undefined
@@ -80,7 +81,6 @@ function save(input: TaskInput) {
       <section v-else class="task-panel" aria-labelledby="list-title">
         <div class="panel-heading">
           <div>
-            <p class="eyebrow">YOUR SPACE TO BEGIN</p>
             <h1 id="list-title" ref="heading" tabindex="-1">
               Tasks <span>{{ store.tasks.length }}</span>
             </h1>
@@ -91,7 +91,7 @@ function save(input: TaskInput) {
             title="Add a task"
             @click="create"
           >
-            <AppIcon name="plus" />Add Task
+            <AppIcon name="plus" />
           </button>
         </div>
         <TaskList v-if="store.tasks.length" @edit="edit" @select="focus" />
@@ -129,7 +129,7 @@ function save(input: TaskInput) {
           <span class="dock-row">
             <span class="dock-title">{{ timer.task.title }}</span>
             <span class="dock-time"
-              >{{ Math.round(timer.progress) }}% ·
+              >{{ Math.round(timer.progress) }}% &middot;
               {{ Math.ceil(timer.remaining / 60000) }} min</span
             >
           </span>
@@ -150,7 +150,7 @@ function save(input: TaskInput) {
       <p v-if="view === 'list'">
         {{ store.remaining }} tasks to do &middot; {{ store.totalMinutes }} min planned
       </p>
-      <p>Just for this visit · Tasks reset when you reload</p>
+      <p>{{ persistenceNotice }}</p>
     </footer>
     <span class="sr-only" role="status">{{ notice }}</span>
   </div>
@@ -519,5 +519,38 @@ progress {
   width: 100%;
   justify-content: space-between;
   border-color: #eb77564d;
+}
+.task-panel {
+  width: 480px;
+  padding: 16px 20px;
+  background: linear-gradient(120deg, #19171b80, #121113a6);
+  border-color: #ffffff09;
+  border-radius: 18px;
+}
+.panel-heading {
+  margin-bottom: 8px;
+  h1 {
+    font-size: 16px;
+    font-weight: 400;
+  }
+  > button {
+    border: 0;
+    background: transparent;
+    width: 28px;
+    padding: 0;
+  }
+}
+.start-focus {
+  position: relative;
+  height: 40px;
+  border-radius: 24px;
+  border-color: #ffffff12;
+  background: linear-gradient(110deg, #ffffff08, #ffffff04);
+  justify-content: center;
+  font-weight: 400;
+  svg {
+    position: absolute;
+    right: 16px;
+  }
 }
 </style>
