@@ -2,7 +2,15 @@
   color-scheme: dark;
   --text: #eeeeef;
   --muted: #aaa6ae;
-  --border: #ffffff16;
+  --border: #ffffff1a;
+  --surface: rgb(24 23 26 / 88%);
+  --surface-hover: #ffffff0d;
+  --panel-radius: 14px;
+  --control-radius: 10px;
+  --surface-blur: 16px;
+  --surface-shadow: 0 16px 48px #0005, inset 0 1px 0 #ffffff04;
+  --focus-ring: #e5a18d;
+  --motion-fast: 160ms;
   font-family:
     Inter,
     -apple-system,
@@ -46,10 +54,11 @@ button:disabled {
   opacity: 0.28;
   cursor: default;
 }
+:where(a, [tabindex]):focus-visible,
 button:focus-visible,
 input:focus-visible,
 select:focus-visible {
-  outline: 2px solid #e5a18d;
+  outline: 2px solid var(--focus-ring);
   outline-offset: 4px;
 }
 button.icon-button {
@@ -79,4 +88,19 @@ button.primary {
     width: 36px;
     height: 36px;
   }
+}
+
+button:active:not(:disabled) {
+  border-color: var(--focus-ring);
+}
+.panel-enter-active,
+.panel-leave-active {
+  transition:
+    opacity var(--motion-fast),
+    transform var(--motion-fast);
+}
+.panel-enter-from,
+.panel-leave-to {
+  opacity: 0;
+  transform: translateY(4px);
 }

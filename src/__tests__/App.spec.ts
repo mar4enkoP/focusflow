@@ -17,6 +17,21 @@ afterEach(() => {
   wrappers.length = 0
 })
 describe('task manager', () => {
+  it('navigates categories by keyboard and dismisses the menu before the form', async () => {
+    const { wrapper } = setup()
+    await wrapper.get('#task-category').trigger('keydown', { key: 'ArrowDown' })
+    await nextTick()
+    expect(document.activeElement?.getAttribute('role')).toBe('option')
+    await wrapper.get('[role="listbox"]').trigger('keydown', { key: 'End' })
+    expect(document.activeElement?.textContent).toContain('Reading')
+    await wrapper.get('[role="listbox"]').trigger('keydown', { key: 'Escape' })
+    expect(wrapper.find('[role="listbox"]').exists()).toBe(false)
+    expect(document.activeElement?.id).toBe('task-category')
+    expect(wrapper.find('form').exists()).toBe(true)
+    await wrapper.get('button.quiet').trigger('click')
+    expect(wrapper.find('form').exists()).toBe(false)
+    expect(document.activeElement?.id).toBe('list-title')
+  })
   it('opens focus without starting, hides empty content, and preserves editing', async () => {
     const { wrapper, store, timer } = setup()
     await wrapper.get('#task-title').setValue('First task')

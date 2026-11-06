@@ -32,11 +32,7 @@ const editing = ref<Task>()
 const heading = ref<HTMLElement>()
 const notice = ref('')
 const title = computed(() =>
-  editing.value
-    ? 'A little change of plan'
-    : store.tasks.length
-      ? 'Add a task'
-      : 'Add your first task',
+  editing.value ? 'Edit task' : store.tasks.length ? 'Add a task' : 'Add your first task',
 )
 function create() {
   editing.value = undefined
@@ -60,7 +56,7 @@ function save(input: TaskInput) {
 </script>
 <template>
   <div class="app-shell" :class="{ 'is-focus': view === 'focus', 'is-creating': view === 'form' }">
-    <FocusBackdrop v-if="view === 'focus'" />
+    <FocusBackdrop :mode="view" />
     <header>
       <a
         class="brand"
@@ -163,54 +159,6 @@ function save(input: TaskInput) {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  &::before,
-  &::after {
-    content: '';
-    position: absolute;
-    z-index: -1;
-    pointer-events: none;
-    left: 50%;
-    bottom: 112px;
-    width: min(980px, 94vw);
-    height: clamp(170px, 26vh, 290px);
-    transform: translateX(-50%);
-    border-radius: 50%;
-    opacity: 0.28;
-    mask-image:
-      linear-gradient(transparent 25%, #000 78%),
-      linear-gradient(90deg, transparent, #000 22%, #000 78%, transparent);
-    mask-composite: intersect;
-  }
-  &::before {
-    background: radial-gradient(
-      ellipse at 50% 0%,
-      transparent 48%,
-      #66101c55 70%,
-      #dc241bd0 89%,
-      #ff6a20 97%,
-      #ffab55 99%,
-      transparent 100%
-    );
-    box-shadow:
-      inset 0 -12px 20px -13px #ffd097,
-      inset 0 -28px 45px -20px #ff431a;
-    filter: blur(2px);
-  }
-  &::after {
-    background: radial-gradient(
-      ellipse at 50% 0%,
-      transparent 65%,
-      #d8241844 85%,
-      #ff4c255e 96%,
-      transparent 100%
-    );
-    filter: blur(24px);
-    transform: translateX(-50%) scale(1.08, 1.15);
-  }
-  &.is-focus::before,
-  &.is-focus::after {
-    display: none;
-  }
   &.is-focus {
     main {
       padding-top: 0;
@@ -223,23 +171,11 @@ function save(input: TaskInput) {
       display: none;
     }
   }
-  &.is-creating {
-    &::before {
-      bottom: -170px;
-      width: min(780px, 110vw);
-      height: 340px;
-      background: radial-gradient(ellipse, #b8291c42, #57121a1c 40%, transparent 70%);
-      box-shadow: none;
-      mask-image: none;
-      filter: blur(28px);
-      opacity: 1;
-    }
-    &::after,
-    .header-note {
-      display: none;
-    }
+  &.is-creating .header-note {
+    display: none;
   }
 }
+
 header {
   display: flex;
   justify-content: space-between;
@@ -342,30 +278,6 @@ h1 {
   line-height: 18px;
   font-size: 13px;
   margin: 8px 0 24px;
-}
-.task-panel {
-  width: 520px;
-  max-width: 100%;
-  padding: 24px;
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  background: #19171b65;
-  backdrop-filter: blur(16px);
-  box-shadow: 0 16px 60px #00000026;
-}
-.panel-heading {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-  h1 {
-    font-size: 18px;
-  }
-  h1 span {
-    color: var(--muted);
-    font-size: 12px;
-    margin-left: 8px;
-  }
 }
 .empty {
   text-align: center;
@@ -514,43 +426,51 @@ progress {
     border-radius: 2px;
   }
 }
+
+.task-panel {
+  width: 480px;
+  max-width: 100%;
+  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--panel-radius);
+  backdrop-filter: blur(var(--surface-blur));
+  box-shadow: var(--surface-shadow);
+}
+.panel-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  h1 {
+    font-size: 16px;
+    font-weight: 500;
+    letter-spacing: -0.2px;
+  }
+  h1 span {
+    color: var(--muted);
+    font-size: 12px;
+    margin-left: 8px;
+  }
+  > button {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border-radius: var(--control-radius);
+  }
+}
 .start-focus {
   margin-top: 20px;
   width: 100%;
+  height: 36px;
+  border-radius: var(--control-radius);
+  border-color: #ffffff30;
+  background: #ffffff10;
   justify-content: space-between;
-  border-color: #eb77564d;
 }
-.task-panel {
-  width: 480px;
-  padding: 16px 20px;
-  background: linear-gradient(120deg, #19171b80, #121113a6);
-  border-color: #ffffff09;
-  border-radius: 18px;
-}
-.panel-heading {
-  margin-bottom: 8px;
-  h1 {
-    font-size: 16px;
-    font-weight: 400;
-  }
-  > button {
-    border: 0;
-    background: transparent;
-    width: 28px;
-    padding: 0;
-  }
-}
-.start-focus {
-  position: relative;
-  height: 40px;
-  border-radius: 24px;
-  border-color: #ffffff12;
-  background: linear-gradient(110deg, #ffffff08, #ffffff04);
-  justify-content: center;
-  font-weight: 400;
-  svg {
-    position: absolute;
-    right: 16px;
+@media (max-width: 420px) {
+  .task-panel {
+    padding: 16px;
   }
 }
 </style>

@@ -105,27 +105,37 @@ defineEmits<{ edit: [task: Task]; select: [id: string] }>()
 </template>
 <style scoped lang="scss">
 .tasks {
-  margin: 0;
-  padding: 0;
+  margin: 0 -6px;
+  padding: 4px 6px;
   list-style: none;
   max-height: min(46vh, 420px);
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #ffffff30 transparent;
+  overscroll-behavior: contain;
 }
 li {
-  display: flex;
+  display: grid;
+  grid-template-columns: 18px 16px 16px minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
-  padding: 14px 0;
+  padding: 12px 4px;
+  min-height: 64px;
   border-bottom: 1px solid var(--border);
+  transition: background var(--motion-fast);
   &:last-child {
     border-bottom: 0;
+  }
+  &:hover,
+  &:focus-within {
+    background: var(--surface-hover);
   }
 }
 input {
   accent-color: #ece5e1;
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin: 0;
   cursor: pointer;
 }
 svg {
@@ -134,107 +144,65 @@ svg {
 }
 .task-info {
   min-width: 0;
-  flex: 1;
 }
-.title {
+.select-task {
   display: block;
+  width: 100%;
+  height: auto;
+  min-height: 24px;
+  text-align: left;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  padding: 0;
   overflow-wrap: anywhere;
   line-height: 1.5;
+  font-size: 13px;
+  &:hover:not(:disabled) {
+    background: transparent;
+    color: #fff;
+  }
 }
 .metadata {
   display: block;
   color: var(--muted);
   font-size: 11px;
-  margin-top: 3px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
 }
-.completed .title {
-  text-decoration: line-through;
+.completed .select-task {
+  opacity: 1;
   color: var(--muted);
+  text-decoration: line-through;
 }
 .row-actions {
   display: flex;
-  gap: 2px;
+  gap: 4px;
 }
 .delete:hover {
   color: #ffae9a;
-}
-@media (max-width: 540px) {
-  li {
-    flex-wrap: wrap;
-    gap: 10px;
-  }
-  .task-info {
-    flex-basis: calc(100% - 70px);
-  }
-  .row-actions {
-    margin-left: 48px;
-  }
-}
-.select-task {
-  height: auto;
-  min-height: 28px;
-  text-align: left;
-  border: 0;
-  background: transparent;
-  padding: 0;
-  justify-content: flex-start;
-  overflow-wrap: anywhere;
 }
 .drag-handle {
   border: 0;
   padding: 0;
   width: 18px;
-  flex-shrink: 0;
   background: transparent;
-  color: #777278;
+  color: var(--muted);
   cursor: grab;
-  font-size: 20px;
 }
 .dragging {
   opacity: 0.4;
 }
 .target {
-  box-shadow: inset 0 2px #dc8b73;
+  box-shadow: inset 0 2px var(--focus-ring);
 }
-li {
-  padding: 12px 0;
-  min-height: 56px;
-  gap: 14px;
-}
-.task-info {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.select-task {
-  flex: 1;
-  font-size: 12px;
-}
-.metadata {
-  white-space: nowrap;
-  font-size: 11px;
-  margin: 0;
-}
-.row-actions {
-  opacity: 0;
-  transition: opacity 150ms;
-}
-li:hover .row-actions,
-li:focus-within .row-actions {
-  opacity: 1;
-}
-.completed .select-task {
-  color: var(--muted);
-  text-decoration: line-through;
-}
-@media (hover: none) {
-  .row-actions {
-    opacity: 1;
+@media (max-width: 420px) {
+  li {
+    gap: 8px;
   }
-}
-@media (prefers-reduced-motion: reduce) {
   .row-actions {
-    transition: none;
+    flex-direction: column;
+    gap: 0;
   }
 }
 </style>

@@ -12,7 +12,6 @@ const input = reactive<TaskInput>({
 const errors = ref({ title: '', duration: '', category: '' })
 const titleField = ref<HTMLInputElement>()
 const durationField = ref<HTMLInputElement>()
-const keyboardNavigation = ref(false)
 const categoryOpen = ref(false)
 const categoryRoot = ref<HTMLElement>()
 const categoryButton = ref<HTMLButtonElement>()
@@ -72,14 +71,7 @@ async function submit() {
 }
 </script>
 <template>
-  <form
-    novalidate
-    :class="{ 'keyboard-navigation': keyboardNavigation }"
-    @pointerdown="keyboardNavigation = false"
-    @keydown.tab="keyboardNavigation = true"
-    @submit.prevent="submit"
-    @keydown.esc.prevent="emit('cancel')"
-  >
+  <form novalidate @submit.prevent="submit" @keydown.esc.prevent="emit('cancel')">
     <label for="task-title">Task title</label>
     <div class="field">
       <AppIcon :name="input.category" /><input
@@ -132,29 +124,31 @@ async function submit() {
             <AppIcon :name="input.category" /><span>{{ input.category }}</span
             ><AppIcon name="down" />
           </button>
-          <div
-            v-if="categoryOpen"
-            id="category-options"
-            class="category-options"
-            role="listbox"
-            aria-label="Task category"
-            @keydown="categoryKey"
-          >
-            <button
-              v-for="(category, index) in categories"
-              :key="category"
-              type="button"
-              role="option"
-              :aria-selected="input.category === category"
-              :tabindex="categoryIndex === index ? 0 : -1"
-              @click="chooseCategory(index)"
+          <Transition name="panel">
+            <div
+              v-if="categoryOpen"
+              id="category-options"
+              class="category-options"
+              role="listbox"
+              aria-label="Task category"
+              @keydown="categoryKey"
             >
-              <AppIcon :name="category" /><span>{{ category }}</span>
-              <span v-if="input.category === category" class="selected-mark" aria-hidden="true"
-                >&#10003;</span
+              <button
+                v-for="(category, index) in categories"
+                :key="category"
+                type="button"
+                role="option"
+                :aria-selected="input.category === category"
+                :tabindex="categoryIndex === index ? 0 : -1"
+                @click="chooseCategory(index)"
               >
-            </button>
-          </div>
+                <AppIcon :name="category" /><span>{{ category }}</span>
+                <span v-if="input.category === category" class="selected-mark" aria-hidden="true"
+                  >&#10003;</span
+                >
+              </button>
+            </div>
+          </Transition>
         </div>
       </div>
     </div>
@@ -164,7 +158,7 @@ async function submit() {
       <button type="submit" class="primary">
         {{ task ? 'Save changes' : 'Add task' }}<AppIcon name="arrow" />
       </button>
-      <button v-if="task" type="button" class="quiet" @click="emit('cancel')">Cancel</button>
+      <button type="button" class="quiet" @click="emit('cancel')">Cancel</button>
     </div>
   </form>
 </template>
@@ -173,11 +167,10 @@ form {
   text-align: left;
 }
 label {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  margin: 0 0 8px 2px;
 }
 .field {
   position: relative;
@@ -186,8 +179,8 @@ label {
   gap: 10px;
   padding: 0 14px;
   height: 34px;
-  border: 1px solid #ffffff0b;
-  border-radius: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--control-radius);
   background: linear-gradient(110deg, #ffffff07, #ffffff04);
   color: var(--muted);
   > svg {
@@ -239,8 +232,8 @@ select {
   height: 14px;
   pointer-events: none;
 }
-.keyboard-navigation .field:focus-within {
-  outline: 1px solid var(--muted);
+.field:focus-within {
+  outline: 2px solid var(--focus-ring);
   outline-offset: 3px;
 }
 input::placeholder {
@@ -252,20 +245,20 @@ select option {
 .details {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 14px;
-  margin-top: 10px;
+  gap: 12px;
+  margin-top: 16px;
 }
 .actions {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-top: 10px;
+  margin-top: 16px;
   .primary {
     position: relative;
     width: 100%;
-    height: 42px;
-    border-radius: 24px;
-    border-color: #ffffff0d;
+    height: 36px;
+    border-radius: var(--control-radius);
+    border-color: #ffffff30;
     background: linear-gradient(110deg, #ffffff07, #ffffff04);
     justify-content: center;
     padding-inline: 16px;
@@ -309,18 +302,16 @@ select option {
 }
 .category-options {
   position: absolute;
-  top: calc(100% + 7px);
+  bottom: calc(100% + 8px);
   left: 0;
   right: 0;
   z-index: 10;
   padding: 5px;
-  border: 1px solid #ffffff14;
-  border-radius: 14px;
-  background: linear-gradient(135deg, #252125fa, #171519fa);
-  box-shadow:
-    0 12px 32px #0008,
-    inset 0 1px #ffffff06;
-  backdrop-filter: blur(18px);
+  border: 1px solid var(--border);
+  border-radius: var(--panel-radius);
+  background: var(--surface);
+  box-shadow: var(--surface-shadow);
+  backdrop-filter: blur(var(--surface-blur));
   button {
     width: 100%;
     gap: 10px;
