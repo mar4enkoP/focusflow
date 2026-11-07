@@ -2,14 +2,18 @@
 import { defineStore } from 'pinia'
 export const categories = ['Work', 'Study', 'Personal', 'Health', 'Reading'] as const
 export type Category = (typeof categories)[number]
+export const priorities = ['High', 'Medium', 'Low'] as const
+export type Priority = (typeof priorities)[number]
 export interface TaskInput {
   title: string
   duration: number
   category: Category
+  priority?: Priority
 }
 export interface Task extends TaskInput {
   id: string
   completed: boolean
+  priority: Priority
 }
 export function validateTask(input: TaskInput) {
   return {
@@ -19,6 +23,10 @@ export function validateTask(input: TaskInput) {
         ? ''
         : 'Choose a whole number from 1 to 1,440 minutes.',
     category: categories.includes(input.category) ? '' : 'Choose a category.',
+    priority:
+      input.priority === undefined || priorities.includes(input.priority)
+        ? ''
+        : 'Choose a priority.',
   }
 }
 export const useTasksStore = defineStore('tasks', () => {
@@ -29,7 +37,7 @@ export const useTasksStore = defineStore('tasks', () => {
   )
   function save(input: TaskInput, id?: string) {
     if (Object.values(validateTask(input)).some(Boolean)) return false
-    const values = { ...input, title: input.title.trim() }
+    const values = { ...input, title: input.title.trim(), priority: input.priority ?? 'Medium' }
     if (id) {
       const task = tasks.value.find((t) => t.id === id)
       if (!task) return false
@@ -47,9 +55,32 @@ export const useTasksStore = defineStore('tasks', () => {
   function move(id: string, direction: -1 | 1) {
     const index = tasks.value.findIndex((t) => t.id === id)
     const destination = index + direction
-    if (index < 0 || destination < 0 || destination >= tasks.value.length) return
-    const [task] = tasks.value.splice(index, 1)
-    if (task) tasks.value.splice(destination, 0, task)
+    return moveTo(id, destination)
   }
-  return { tasks, remaining, totalMinutes, save, remove, toggle, move }
+  // Publish a complete order once: synchronous timer/persistence watchers must never
+  // observe the selected task temporarily missing during a reorder.
+  function moveTo(id: string, destination: number) {
+    const index = tasks.value.findIndex((t) => t.id === id)
+    if (
+      index < 0 ||
+      !Number.isInteger(destination) ||
+      destination < 0 ||
+      destination >= tasks.value.length ||
+      index === destination
+    )
+      return false
+    const reordered = [...tasks.value]
+    const [task] = reordered.splice(index, 1)
+    reordered.splice(destination, 0, task!)
+    tasks.value = reordered
+    return true
+  }
+  function reorder(id: string, targetId: string, position: 'before' | 'after') {
+    const from = tasks.value.findIndex((t) => t.id === id)
+    const target = tasks.value.findIndex((t) => t.id === targetId)
+    if (from < 0 || target < 0 || id === targetId) return false
+    const boundary = target + (position === 'after' ? 1 : 0)
+    return moveTo(id, boundary - (from < boundary ? 1 : 0))
+  }
+  return { tasks, remaining, totalMinutes, save, remove, toggle, move, reorder }
 })

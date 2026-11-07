@@ -1,6 +1,6 @@
 ﻿<script setup lang="ts">
 import { nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
-import { categories, validateTask, type Task, type TaskInput } from '@/stores/tasks'
+import { categories, priorities, validateTask, type Task, type TaskInput } from '@/stores/tasks'
 import AppIcon from './AppIcon.vue'
 const props = defineProps<{ task?: Task }>()
 const emit = defineEmits<{ save: [input: TaskInput]; cancel: [] }>()
@@ -8,8 +8,9 @@ const input = reactive<TaskInput>({
   title: props.task?.title ?? '',
   duration: props.task?.duration ?? 25,
   category: props.task?.category ?? 'Work',
+  priority: props.task?.priority ?? 'Medium',
 })
-const errors = ref({ title: '', duration: '', category: '' })
+const errors = ref({ title: '', duration: '', category: '', priority: '' })
 const titleField = ref<HTMLInputElement>()
 const durationField = ref<HTMLInputElement>()
 const categoryOpen = ref(false)
@@ -154,6 +155,16 @@ async function submit() {
     </div>
     <p v-if="errors.duration" id="duration-error" class="error">{{ errors.duration }}</p>
     <p v-if="errors.category" class="error">{{ errors.category }}</p>
+    <fieldset class="priority-picker">
+      <legend>Priority</legend>
+      <div class="priority-options">
+        <label v-for="priority in priorities" :key="priority">
+          <input v-model="input.priority" type="radio" name="priority" :value="priority" />
+          <span>{{ priority }}</span>
+        </label>
+      </div>
+    </fieldset>
+    <p v-if="errors.priority" class="error">{{ errors.priority }}</p>
     <div class="actions">
       <button type="submit" class="primary">
         {{ task ? 'Save changes' : 'Add task' }}<AppIcon name="arrow" />
@@ -165,6 +176,81 @@ async function submit() {
 <style scoped lang="scss">
 form {
   text-align: left;
+}
+.priority-picker {
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  margin: 16px 0 0;
+  legend {
+    color: var(--muted);
+    font-size: 11px;
+    margin-bottom: 8px;
+  }
+}
+.priority-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--control-radius);
+  background: var(--glass-fill);
+  backdrop-filter: blur(var(--surface-blur));
+  box-shadow: var(--glass-highlight);
+  label {
+    position: relative;
+    margin: 0;
+    cursor: pointer;
+  }
+  span {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 36px;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    color: var(--muted);
+    font-size: 12px;
+    transition:
+      background var(--motion-fast),
+      border-color var(--motion-fast),
+      color var(--motion-fast);
+  }
+  label:hover span {
+    background: #ffffff08;
+    color: var(--text);
+  }
+  input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+    &:checked + span {
+      color: var(--text);
+      border-color: #d990703d;
+      background: linear-gradient(115deg, #e67d4826, #c44d3820 58%, #ffffff09);
+      box-shadow: inset 0 1px 0 #ffffff08;
+    }
+    &:focus-visible + span {
+      outline: 1px solid var(--focus-ring);
+      outline-offset: 1px;
+    }
+  }
+  @media (pointer: coarse) {
+    span {
+      min-height: 44px;
+    }
+  }
+  @media (forced-colors: active) {
+    input:checked + span {
+      border-color: Highlight;
+      color: Highlight;
+    }
+  }
 }
 label {
   display: block;
@@ -179,12 +265,15 @@ label {
   gap: 10px;
   padding: 0 14px;
   height: 34px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--glass-edge);
   border-radius: var(--control-radius);
-  background: linear-gradient(110deg, #ffffff07, #ffffff04);
+  background: var(--glass-fill);
+  backdrop-filter: blur(var(--surface-blur));
+  box-shadow: var(--glass-highlight);
   color: var(--muted);
   transition:
     border-color var(--motion-fast),
+    box-shadow 200ms ease,
     background var(--motion-fast);
   > svg {
     flex-shrink: 0;
@@ -235,9 +324,23 @@ select {
   height: 14px;
   pointer-events: none;
 }
+.field:hover {
+  background: var(--glass-hover);
+}
 .field:focus-within {
-  border-color: var(--focus-ring);
+  border-color: var(--glass-edge);
+  background: var(--glass-hover);
+  box-shadow: var(--glass-focus-light);
   outline: none;
+}
+.category-trigger:focus-visible {
+  outline: 1px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+@media (forced-colors: active) {
+  .field:focus-within {
+    outline: 1px solid Highlight;
+  }
 }
 input::placeholder {
   color: #929097;
@@ -261,8 +364,13 @@ select option {
     width: 100%;
     height: 36px;
     border-radius: var(--control-radius);
-    border-color: #ffffff30;
-    background: linear-gradient(110deg, #ffffff07, #ffffff04);
+    border-color: #ffffff24;
+    background: var(--glass-fill);
+    backdrop-filter: blur(var(--surface-blur));
+    box-shadow: var(--glass-highlight);
+    &:hover {
+      background: var(--glass-hover);
+    }
     justify-content: center;
     padding-inline: 16px;
     svg {

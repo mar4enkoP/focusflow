@@ -185,14 +185,41 @@ header {
   letter-spacing: -0.3px;
 }
 main {
+  position: relative;
+  isolation: isolate;
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 48px 24px 64px;
+  // Keep the light mounted outside the transitioning panels so it never restarts
+  // or changes its bounds when one panel leaves and the next one enters.
+  &::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 60%;
+    width: min(620px, 96vw);
+    height: min(460px, 70svh);
+    transform: translate(-50%, -35%);
+    z-index: -1;
+    pointer-events: none;
+    mask-image: radial-gradient(ellipse 50% 50% at center, #000 20%, transparent 100%);
+    background:
+      radial-gradient(ellipse at 30% 65%, rgb(var(--ambient-warm) / 10%), transparent 65%),
+      radial-gradient(ellipse at 80% 45%, rgb(var(--ambient-rose) / 5%), transparent 60%);
+    transition: opacity 200ms ease;
+  }
+}
+.is-focus main::before {
+  opacity: 0;
 }
 .creation,
 .task-panel {
+  position: relative;
+  isolation: isolate;
+  // Preserve the same backdrop sampling boundary during and after opacity transitions.
+  will-change: opacity;
   width: 356px;
   max-width: 100%;
   text-align: center;
@@ -441,8 +468,13 @@ progress {
   width: 100%;
   height: 36px;
   border-radius: var(--control-radius);
-  border-color: #ffffff30;
-  background: linear-gradient(110deg, #ffffff07, #ffffff04);
+  border-color: #ffffff24;
+  background: var(--glass-fill);
+  backdrop-filter: blur(var(--surface-blur));
+  box-shadow: var(--glass-highlight);
+  &:hover {
+    background: var(--glass-hover);
+  }
   justify-content: center;
   svg {
     position: absolute;

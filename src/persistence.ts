@@ -60,7 +60,7 @@ export function installPersistence(pinia: Pinia) {
         !validTimer(data.timer)
       )
         throw new Error('Invalid saved data')
-      tasks.tasks = data.tasks
+      tasks.tasks = data.tasks.map((task) => ({ ...task, priority: task.priority ?? 'Medium' }))
       timer.restore(data.timer)
     }
   } catch {

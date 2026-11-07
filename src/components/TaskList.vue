@@ -1,23 +1,50 @@
 ﻿<script setup lang="ts">
-import { ref } from 'vue'
+import { nextTick, ref } from 'vue'
 import { useTasksStore, type Task } from '@/stores/tasks'
 import AppIcon from './AppIcon.vue'
 const store = useTasksStore()
 const dragging = ref<string>()
-const target = ref<string>()
+const target = ref<{ id: string; position: 'before' | 'after' }>()
+const announcement = ref('')
+const list = ref<HTMLOListElement>()
 function endDrag() {
   dragging.value = undefined
   target.value = undefined
 }
-function drop(id: string) {
-  const from = store.tasks.findIndex((t) => t.id === dragging.value)
-  const to = store.tasks.findIndex((t) => t.id === id)
-  if (from >= 0 && to >= 0) {
-    while (store.tasks.findIndex((t) => t.id === dragging.value) !== to)
-      store.move(dragging.value!, from < to ? 1 : -1)
+function dragOver(event: DragEvent, id: string) {
+  if (!dragging.value) return
+  event.preventDefault()
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
+  const bounds = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  target.value = {
+    id,
+    position: event.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after',
   }
-  dragging.value = undefined
-  target.value = undefined
+}
+async function announce(id: string, restoreFocus = false) {
+  const index = store.tasks.findIndex((task) => task.id === id)
+  const task = store.tasks[index]
+  if (!task) return
+  announcement.value = `${task.title}, position ${index + 1} of ${store.tasks.length}.`
+  await nextTick()
+  if (restoreFocus) {
+    const handle = list.value?.querySelectorAll<HTMLButtonElement>('.drag-handle')[index]
+    handle?.focus()
+    handle?.scrollIntoView?.({ block: 'nearest' })
+  }
+}
+function move(id: string, direction: -1 | 1) {
+  store.move(id, direction)
+  void announce(id, true)
+}
+function drop(event: DragEvent, id: string) {
+  if (!dragging.value) return
+  dragOver(event, id)
+  const movedId = dragging.value
+  if (target.value && store.reorder(movedId, target.value.id, target.value.position)) {
+    void announce(movedId)
+  }
+  endDrag()
 }
 function drag(event: DragEvent, id: string) {
   dragging.value = id
@@ -29,28 +56,39 @@ function drag(event: DragEvent, id: string) {
 defineEmits<{ edit: [task: Task]; select: [id: string] }>()
 </script>
 <template>
-  <ol class="tasks" aria-label="Task list">
+  <p class="reorder-status" role="status" aria-live="polite">{{ announcement }}</p>
+  <ol
+    ref="list"
+    class="tasks"
+    aria-label="Task list"
+    @dragleave="
+      !($event.currentTarget as HTMLElement).contains($event.relatedTarget as Node) &&
+      (target = undefined)
+    "
+    @keydown.esc="endDrag"
+  >
     <li
       v-for="task in store.tasks"
       :key="task.id"
       :class="{
         completed: task.completed,
         dragging: dragging === task.id,
-        target: target === task.id,
+        'drop-before': target?.id === task.id && target.position === 'before',
+        'drop-after': target?.id === task.id && target.position === 'after',
       }"
       :data-task-id="task.id"
-      draggable="true"
-      @dragstart="drag($event, task.id)"
-      @dragover.prevent="target = task.id"
-      @drop.prevent="drop(task.id)"
+      @dragover="dragOver($event, task.id)"
+      @drop.prevent="drop($event, task.id)"
       @dragend="endDrag"
     >
       <button
         class="drag-handle"
+        draggable="true"
+        @dragstart="drag($event, task.id)"
         :aria-label="`Reorder ${task.title}; use arrow keys`"
         title="Drag to reorder; Arrow keys to move"
-        @keydown.up.prevent="store.move(task.id, -1)"
-        @keydown.down.prevent="store.move(task.id, 1)"
+        @keydown.up.prevent="move(task.id, -1)"
+        @keydown.down.prevent="move(task.id, 1)"
       >
         <svg viewBox="0 0 16 20" width="16" height="20" aria-hidden="true">
           <g fill="currentColor">
@@ -79,7 +117,10 @@ defineEmits<{ edit: [task: Task]; select: [id: string] }>()
         >
           {{ task.title }}</button
         ><span class="metadata"
-          >{{ task.duration }} min<span v-if="task.completed"> &middot; Completed</span></span
+          >{{ task.duration }} min<span v-if="task.completed"> &middot; Completed</span
+          ><span :aria-label="`${task.priority} priority`">
+            &middot; {{ task.priority }}</span
+          ></span
         >
       </div>
       <div class="row-actions">
@@ -118,23 +159,28 @@ defineEmits<{ edit: [task: Task]; select: [id: string] }>()
   overscroll-behavior: contain;
 }
 li {
+  position: relative;
+  flex-shrink: 0;
   display: grid;
   grid-template-columns: 18px 16px 16px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   padding: 10px;
   min-height: 58px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--glass-edge);
   border-radius: var(--control-radius);
-  background: linear-gradient(110deg, #ffffff07, #ffffff04);
+  background: var(--glass-fill);
+  backdrop-filter: blur(var(--surface-blur));
+  box-shadow: var(--glass-highlight);
   text-align: left;
   transition:
     background var(--motion-fast),
+    box-shadow 200ms ease,
     border-color var(--motion-fast);
   &:hover,
   &:focus-within {
-    background: var(--surface-hover);
-    border-color: #ffffff30;
+    background: var(--glass-hover);
+    box-shadow: var(--glass-focus-light);
   }
 }
 input {
@@ -225,8 +271,29 @@ svg {
 .dragging {
   opacity: 0.4;
 }
-.target {
-  box-shadow: inset 0 2px var(--focus-ring);
+.drop-before::before,
+.drop-after::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--focus-ring);
+  pointer-events: none;
+}
+.drop-before::before {
+  top: -5px;
+}
+.drop-after::after {
+  bottom: -5px;
+}
+.reorder-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
 }
 @media (max-width: 420px) {
   li {
