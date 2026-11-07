@@ -3,6 +3,7 @@ import type { Pinia } from 'pinia'
 import { useTasksStore, validateTask, type Task } from './stores/tasks'
 import { useTimerStore } from './stores/timer'
 import { normalizeTitle, useTaskMemoryStore, type TaskMemoryEntry } from './stores/taskMemory'
+import { useFocusHistoryStore } from './stores/focusHistory'
 
 export const STORAGE_KEY = 'focusflow'
 export const MEMORY_STORAGE_KEY = 'focusflow-memory'
@@ -11,9 +12,10 @@ export const persistenceNotice = ref('Saved on this device')
 const installed = new WeakSet<Pinia>()
 type Timer = ReturnType<ReturnType<typeof useTimerStore>['snapshot']>
 interface Snapshot {
-  version: 1
+  version: 1 | 2
   tasks: Task[]
   timer: Timer
+  focus?: ReturnType<ReturnType<typeof useFocusHistoryStore>['snapshot']>
 }
 const number = (v: unknown): v is number =>
   typeof v === 'number' && Number.isSafeInteger(v) && v >= 0
@@ -42,13 +44,16 @@ export function installPersistence(pinia: Pinia) {
   installed.add(pinia)
   const tasks = useTasksStore(pinia)
   const timer = useTimerStore(pinia)
+  const history = useFocusHistoryStore(pinia)
   let writable = true
+  let lastWritten: string | null = null
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
+    lastWritten = raw
     if (raw !== null) {
       const data: Snapshot = JSON.parse(raw)
       if (
-        data.version !== 1 ||
+        ![1, 2].includes(data.version) ||
         !Array.isArray(data.tasks) ||
         !data.tasks.every(
           (t) =>
@@ -64,6 +69,32 @@ export function installPersistence(pinia: Pinia) {
       )
         throw new Error('Invalid saved data')
       tasks.tasks = data.tasks.map((task) => ({ ...task, priority: task.priority ?? 'Medium' }))
+      if (data.version === 2 && !history.restore(data.focus, tasks.tasks, data.timer.selectedId)) {
+        writable = false
+        persistenceNotice.value =
+          'Some focus history is damaged. Valid data is restored; saved data is preserved.'
+      }
+      if (data.version === 1) {
+        // Never infer actual work from a legacy countdown. Preserve it, but exclude
+        // the partially measured task from learning, including saved/paused sessions.
+        for (const task of tasks.tasks.filter(
+          (t) =>
+            !t.completed &&
+            (t.id === data.timer.selectedId || data.timer.saved.some(([id]) => id === t.id)),
+        )) {
+          history.begin(task, false)
+          if (task.id !== data.timer.selectedId || data.timer.state !== 'running')
+            history.pause(task.id)
+        }
+      }
+      const active = tasks.tasks.find((t) => t.id === data.timer.selectedId && !t.completed)
+      if (
+        active &&
+        data.timer.state === 'running' &&
+        !history.sessions.some((s) => s.taskId === active.id)
+      )
+        history.begin(active, false)
+      if (active && !['running', 'expired'].includes(data.timer.state)) history.pause(active.id)
       timer.restore(data.timer)
     }
   } catch {
@@ -74,14 +105,15 @@ export function installPersistence(pinia: Pinia) {
   const save = () => {
     if (!writable) return
     try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({
-          version: 1,
-          tasks: tasks.tasks,
-          timer: timer.snapshot(),
-        } satisfies Snapshot),
-      )
+      const serialized = JSON.stringify({
+        version: 2,
+        tasks: tasks.tasks,
+        timer: timer.snapshot(),
+        focus: history.snapshot(),
+      } satisfies Snapshot)
+      if (serialized === lastWritten) return
+      localStorage.setItem(STORAGE_KEY, serialized)
+      lastWritten = serialized
       persistenceNotice.value = 'Saved on this device'
     } catch {
       persistenceNotice.value = 'Could not save on this device. Changes stay in this visit.'

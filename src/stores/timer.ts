@@ -1,21 +1,27 @@
 import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 import { useTasksStore } from './tasks'
+import { useFocusHistoryStore } from './focusHistory'
 export const useTimerStore = defineStore('timer', () => {
   const tasks = useTasksStore()
+  const history = useFocusHistoryStore()
   const selectedId = ref<string>()
   const remaining = ref(0)
   const budget = ref(0)
   const deadline = ref<number>()
   const state = ref<'ready' | 'running' | 'paused' | 'expired'>('ready')
   const task = computed(() => tasks.tasks.find((t) => t.id === selectedId.value))
+  const isFocusing = computed(() =>
+    history.sessions.some((s) => s.taskId === selectedId.value && s.since !== undefined),
+  )
   const progress = computed(() =>
     budget.value ? Math.min(100, Math.max(0, 100 * (1 - remaining.value / budget.value))) : 0,
   )
   const saved = new Map<string, { remaining: number; budget: number }>()
   function sync() {
+    history.tick(selectedId.value)
     if (state.value !== 'running' || deadline.value === undefined) return
-    remaining.value = Math.max(0, deadline.value - Date.now())
+    remaining.value = Math.min(budget.value, Math.max(0, deadline.value - Date.now()))
     if (!remaining.value) {
       state.value = 'expired'
       deadline.value = undefined
@@ -23,6 +29,7 @@ export const useTimerStore = defineStore('timer', () => {
   }
   function pause() {
     sync()
+    history.pause(selectedId.value)
     if (state.value === 'running') {
       state.value = 'paused'
       deadline.value = undefined
@@ -43,10 +50,12 @@ export const useTimerStore = defineStore('timer', () => {
   function start() {
     if (!task.value || task.value.completed || state.value === 'running' || remaining.value <= 0)
       return
+    history.begin(task.value)
     deadline.value = Date.now() + remaining.value
     state.value = 'running'
   }
   function reset() {
+    history.pause(selectedId.value)
     deadline.value = undefined
     remaining.value = (task.value?.duration ?? 0) * 60000
     budget.value = remaining.value
@@ -58,7 +67,14 @@ export const useTimerStore = defineStore('timer', () => {
     remaining.value += 300000
     budget.value += 300000
     if (state.value === 'running') deadline.value = Date.now() + remaining.value
-    else if (state.value === 'expired') state.value = 'paused'
+    else if (state.value === 'expired') {
+      history.pause(selectedId.value)
+      state.value = 'paused'
+    }
+  }
+  function continueFocus() {
+    if (task.value && !task.value.completed && state.value === 'expired') history.begin(task.value)
+    else start()
   }
   function advance(oldId: string) {
     const index = tasks.tasks.findIndex((t) => t.id === oldId)
@@ -112,6 +128,8 @@ export const useTimerStore = defineStore('timer', () => {
     budget,
     progress,
     state,
+    isFocusing,
+    continueFocus,
     sync,
     pause,
     select,

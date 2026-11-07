@@ -204,7 +204,7 @@ it('only applies a suggestion explicitly, allows overrides, and never creates a 
   expect(tasks.tasks).toHaveLength(1)
   expect(memory.entries[0]!.uses).toBe(1)
   expect((wrapper.get('#task-title').element as HTMLInputElement).value).toBe('Programming')
-  expect((wrapper.get('#task-duration').element as HTMLInputElement).value).toBe('60')
+  expect((wrapper.get('#task-duration').element as HTMLInputElement).value).toBe('17')
   expect(wrapper.get('#task-category').text()).toContain('Study')
   expect((wrapper.get('input[value="High"]').element as HTMLInputElement).checked).toBe(true)
   expect(wrapper.find('[aria-label="Remembered task suggestions"]').exists()).toBe(false)

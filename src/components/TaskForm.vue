@@ -1,10 +1,12 @@
 ﻿<script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { categories, priorities, validateTask, type Task, type TaskInput } from '@/stores/tasks'
 import AppIcon from './AppIcon.vue'
 import FloatingMenu from './FloatingMenu.vue'
 import TaskTitleInput from './TaskTitleInput.vue'
-import type { TaskMemoryEntry } from '@/stores/taskMemory'
+import { normalizeTitle, useTaskMemoryStore, type TaskMemoryEntry } from '@/stores/taskMemory'
+import { useFocusHistoryStore } from '@/stores/focusHistory'
+import { estimateDuration } from '@/estimation'
 const props = defineProps<{ task?: Task }>()
 const emit = defineEmits<{ save: [input: TaskInput]; cancel: [] }>()
 const input = reactive<TaskInput>({
@@ -15,10 +17,26 @@ const input = reactive<TaskInput>({
 })
 const errors = ref({ title: '', duration: '', category: '', priority: '' })
 const titleField = ref<InstanceType<typeof TaskTitleInput>>()
+const memory = useTaskMemoryStore()
+const history = useFocusHistoryStore()
+const durationEdited = ref(!!props.task)
+const estimate = computed(() => {
+  const preferred = memory.entries.find(
+    (e) => normalizeTitle(e.title) === normalizeTitle(input.title),
+  )
+  return preferred
+    ? estimateDuration(input.title, preferred.duration, history.observations)
+    : undefined
+})
+function applyEstimate() {
+  if (!estimate.value?.learned) return
+  input.duration = estimate.value.minutes
+  durationEdited.value = true
+}
 function reuse(entry: TaskMemoryEntry) {
   Object.assign(input, {
     title: entry.title,
-    duration: entry.duration,
+    duration: durationEdited.value ? input.duration : entry.duration,
     category: entry.category,
     priority: entry.priority,
   })
@@ -100,6 +118,7 @@ async function submit() {
             id="task-duration"
             ref="durationField"
             v-model.number="input.duration"
+            @input="durationEdited = true"
             type="number"
             min="1"
             max="1440"
@@ -162,6 +181,10 @@ async function submit() {
       </div>
     </div>
     <p v-if="errors.duration" id="duration-error" class="error">{{ errors.duration }}</p>
+    <p v-if="estimate?.learned" class="estimate-help">
+      Suggested: {{ estimate.minutes }} min · Based on {{ estimate.count }} completed sessions.
+      <button type="button" class="quiet" @click="applyEstimate">Use estimate</button>
+    </p>
     <p v-if="errors.category" class="error">{{ errors.category }}</p>
     <fieldset class="priority-picker">
       <legend>Priority</legend>
@@ -182,6 +205,15 @@ async function submit() {
   </form>
 </template>
 <style scoped lang="scss">
+.estimate-help {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  button {
+    height: 26px;
+    font-size: inherit;
+  }
+}
 form {
   --glass-fill: var(--form-glass-fill);
   --glass-hover: var(--form-glass-hover);

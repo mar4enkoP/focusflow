@@ -1,6 +1,7 @@
 ﻿import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { useTaskMemoryStore } from './taskMemory'
+import { useFocusHistoryStore } from './focusHistory'
 export const categories = ['Work', 'Study', 'Personal', 'Health', 'Reading'] as const
 export type Category = (typeof categories)[number]
 export const priorities = ['High', 'Medium', 'Low'] as const
@@ -32,6 +33,7 @@ export function validateTask(input: TaskInput) {
 }
 export const useTasksStore = defineStore('tasks', () => {
   const memory = useTaskMemoryStore()
+  const history = useFocusHistoryStore()
   const tasks = ref<Task[]>([])
   const remaining = computed(() => tasks.value.filter((t) => !t.completed).length)
   const totalMinutes = computed(() =>
@@ -49,11 +51,15 @@ export const useTasksStore = defineStore('tasks', () => {
     return true
   }
   function remove(id: string) {
+    history.discard(id)
     tasks.value = tasks.value.filter((t) => t.id !== id)
   }
   function toggle(id: string) {
     const task = tasks.value.find((t) => t.id === id)
-    if (task) task.completed = !task.completed
+    if (task) {
+      if (!task.completed) history.finish(task)
+      task.completed = !task.completed
+    }
   }
   function move(id: string, direction: -1 | 1) {
     const index = tasks.value.findIndex((t) => t.id === id)

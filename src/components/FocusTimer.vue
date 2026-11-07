@@ -19,7 +19,9 @@ const display = computed(() => {
         !timer.task
           ? 'Choose an unfinished task to begin'
           : timer.state === 'expired'
-            ? 'Time is up. Add time or mark your task complete.'
+            ? timer.isFocusing
+              ? 'Time is up · Focus time is still being recorded.'
+              : 'Time is up. Continue focus, add time or complete.'
             : timer.state === 'running'
               ? 'Focus'
               : timer.state === 'paused'
@@ -39,11 +41,11 @@ const display = computed(() => {
       </button>
       <button
         class="play"
-        :aria-label="timer.state === 'running' ? 'Pause timer' : 'Start or resume timer'"
-        :disabled="!timer.task || timer.remaining <= 0"
-        @click="timer.state === 'running' ? timer.pause() : timer.start()"
+        :aria-label="timer.isFocusing ? 'Pause timer' : 'Start or resume timer'"
+        :disabled="!timer.task"
+        @click="timer.isFocusing ? timer.pause() : timer.continueFocus()"
       >
-        <AppIcon :name="timer.state === 'running' ? 'pause' : 'play'" />
+        <AppIcon :name="timer.isFocusing ? 'pause' : 'play'" />
       </button>
       <button
         aria-label="Complete task and select next"
