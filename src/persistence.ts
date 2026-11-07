@@ -2,8 +2,11 @@ import { ref, watch } from 'vue'
 import type { Pinia } from 'pinia'
 import { useTasksStore, validateTask, type Task } from './stores/tasks'
 import { useTimerStore } from './stores/timer'
+import { normalizeTitle, useTaskMemoryStore, type TaskMemoryEntry } from './stores/taskMemory'
 
 export const STORAGE_KEY = 'focusflow'
+export const MEMORY_STORAGE_KEY = 'focusflow-memory'
+export const memoryNotice = ref('')
 export const persistenceNotice = ref('Saved on this device')
 const installed = new WeakSet<Pinia>()
 type Timer = ReturnType<ReturnType<typeof useTimerStore>['snapshot']>
@@ -95,4 +98,71 @@ export function installPersistence(pinia: Pinia) {
     },
     { flush: 'sync' },
   )
+  installMemoryPersistence(pinia, tasks.tasks)
+}
+
+// A separate versioned key keeps damaged/unsupported memory independent of tasks
+// and timers, and avoids rewriting the task snapshot while managing suggestions.
+function installMemoryPersistence(pinia: Pinia, existingTasks: Task[]) {
+  const memory = useTaskMemoryStore(pinia)
+  let writable = true
+  let seeded = false
+  memoryNotice.value = ''
+  try {
+    const raw = localStorage.getItem(MEMORY_STORAGE_KEY)
+    if (raw === null) {
+      // Existing tasks seed memory once; an explicitly saved empty memory stays empty.
+      for (const task of existingTasks) memory.remember(task, 0)
+      seeded = existingTasks.length > 0
+    } else {
+      const data = JSON.parse(raw)
+      if (data?.version !== 1 || !Array.isArray(data.entries)) throw new Error('Invalid memory')
+      const valid = new Map<string, TaskMemoryEntry>()
+      for (const entry of data.entries) {
+        if (
+          !entry ||
+          typeof entry.title !== 'string' ||
+          Object.values(validateTask(entry)).some(Boolean) ||
+          !number(entry.lastUsed) ||
+          !number(entry.uses) ||
+          entry.uses < 1
+        ) {
+          writable = false
+          continue
+        }
+        const key = normalizeTitle(entry.title)
+        const previous = valid.get(key)
+        if (!previous || entry.lastUsed > previous.lastUsed) {
+          valid.set(key, {
+            title: entry.title.trim(),
+            duration: entry.duration,
+            category: entry.category,
+            priority: entry.priority ?? 'Medium',
+            lastUsed: entry.lastUsed,
+            uses: entry.uses,
+          })
+        }
+      }
+      memory.entries = [...valid.values()]
+    }
+  } catch {
+    writable = false
+  }
+  if (!writable)
+    memoryNotice.value =
+      'Saved memory is damaged or unavailable. Changes to suggestions stay in this visit; saved data is preserved.'
+  const saveMemory = () => {
+    if (!writable) return
+    try {
+      localStorage.setItem(
+        MEMORY_STORAGE_KEY,
+        JSON.stringify({ version: 1, entries: memory.entries }),
+      )
+      memoryNotice.value = ''
+    } catch {
+      memoryNotice.value = 'Could not save task memory. Suggestions stay in this visit.'
+    }
+  }
+  memory.$subscribe(saveMemory, { detached: true, flush: 'sync' })
+  if (seeded) saveMemory()
 }

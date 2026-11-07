@@ -1,5 +1,5 @@
 ﻿import { nextTick } from 'vue'
-import { afterEach, describe, it, expect } from 'vitest'
+import { afterEach, describe, it, expect, vi } from 'vitest'
 import { createPinia } from 'pinia'
 import { mount } from '@vue/test-utils'
 import App from '../App.vue'
@@ -13,15 +13,19 @@ function setup() {
   return { wrapper, store: useTasksStore(pinia), timer: useTimerStore(pinia) }
 }
 afterEach(() => {
+  vi.restoreAllMocks()
   wrappers.forEach((w) => w.unmount())
   wrappers.length = 0
 })
 describe('task manager', () => {
   it('navigates categories by keyboard and dismisses the menu before the form', async () => {
     const { wrapper } = setup()
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus')
     await wrapper.get('#task-category').trigger('keydown', { key: 'ArrowDown' })
     await nextTick()
     expect(document.activeElement?.getAttribute('role')).toBe('option')
+    expect(focus).toHaveBeenLastCalledWith({ preventScroll: true })
+    expect((wrapper.get('#category-options').element as HTMLElement).style.position).toBe('fixed')
     await wrapper.get('[role="listbox"]').trigger('keydown', { key: 'End' })
     expect(document.activeElement?.textContent).toContain('Reading')
     await wrapper.get('[role="listbox"]').trigger('keydown', { key: 'Escape' })

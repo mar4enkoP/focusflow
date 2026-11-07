@@ -10,6 +10,18 @@
   --glass-hover: linear-gradient(115deg, #ffffff0c, #ffffff04);
   --glass-edge: #ffffff0c;
   --glass-highlight: inset 0 1px 0 #ffffff05;
+  --form-glass-fill:
+    radial-gradient(ellipse at 20% 100%, rgb(var(--ambient-warm) / 6%), transparent 75%),
+    linear-gradient(115deg, #ffffff05, #ffffff01), rgb(12 10 13 / 22%);
+  --form-glass-hover:
+    radial-gradient(ellipse at 20% 100%, rgb(var(--ambient-warm) / 9%), transparent 75%),
+    linear-gradient(115deg, #ffffff09, #ffffff03), rgb(12 10 13 / 20%);
+  --form-glass-edge: #ffffff18;
+  --form-glass-highlight: inset 0 1px 0 #ffffff09, 0 4px 16px #00000012;
+  --floating-glass-edge: #ffffff18;
+  --floating-glass-fill:
+    radial-gradient(ellipse at 15% 0%, rgb(var(--ambient-warm) / 4%), transparent 70%),
+    linear-gradient(115deg, #ffffff04, #ffffff01), rgb(12 10 13);
   --glass-focus-light: inset 0 0 24px rgb(var(--ambient-warm) / 7%), inset 0 1px 0 #ffffff0c;
   --surface-hover: #ffffff0d;
   --panel-radius: 14px;

@@ -2,6 +2,9 @@
 import { nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { categories, priorities, validateTask, type Task, type TaskInput } from '@/stores/tasks'
 import AppIcon from './AppIcon.vue'
+import FloatingMenu from './FloatingMenu.vue'
+import TaskTitleInput from './TaskTitleInput.vue'
+import type { TaskMemoryEntry } from '@/stores/taskMemory'
 const props = defineProps<{ task?: Task }>()
 const emit = defineEmits<{ save: [input: TaskInput]; cancel: [] }>()
 const input = reactive<TaskInput>({
@@ -11,7 +14,16 @@ const input = reactive<TaskInput>({
   priority: props.task?.priority ?? 'Medium',
 })
 const errors = ref({ title: '', duration: '', category: '', priority: '' })
-const titleField = ref<HTMLInputElement>()
+const titleField = ref<InstanceType<typeof TaskTitleInput>>()
+function reuse(entry: TaskMemoryEntry) {
+  Object.assign(input, {
+    title: entry.title,
+    duration: entry.duration,
+    category: entry.category,
+    priority: entry.priority,
+  })
+  errors.value = { title: '', duration: '', category: '', priority: '' }
+}
 const durationField = ref<HTMLInputElement>()
 const categoryOpen = ref(false)
 const categoryRoot = ref<HTMLElement>()
@@ -23,7 +35,7 @@ function closeCategory() {
 function chooseCategory(index: number) {
   input.category = categories[index]!
   closeCategory()
-  categoryButton.value?.focus()
+  categoryButton.value?.focus({ preventScroll: true })
 }
 async function openCategory() {
   categoryOpen.value = true
@@ -31,14 +43,14 @@ async function openCategory() {
   await nextTick()
   categoryRoot.value
     ?.querySelectorAll<HTMLButtonElement>('[role="option"]')
-    [categoryIndex.value]?.focus()
+    [categoryIndex.value]?.focus({ preventScroll: true })
 }
 function categoryKey(event: KeyboardEvent) {
   if (event.key === 'Escape') {
     event.preventDefault()
     event.stopPropagation()
     closeCategory()
-    categoryButton.value?.focus()
+    categoryButton.value?.focus({ preventScroll: true })
     return
   }
   if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
@@ -52,7 +64,7 @@ function categoryKey(event: KeyboardEvent) {
           categories.length
   categoryRoot.value
     ?.querySelectorAll<HTMLButtonElement>('[role="option"]')
-    [categoryIndex.value]?.focus()
+    [categoryIndex.value]?.focus({ preventScroll: true })
 }
 function outsideCategory(event: PointerEvent) {
   if (!categoryRoot.value?.contains(event.target as Node)) closeCategory()
@@ -73,18 +85,13 @@ async function submit() {
 </script>
 <template>
   <form novalidate @submit.prevent="submit" @keydown.esc.prevent="emit('cancel')">
-    <label for="task-title">Task title</label>
-    <div class="field">
-      <AppIcon :name="input.category" /><input
-        id="task-title"
-        ref="titleField"
-        v-model="input.title"
-        placeholder="Task name"
-        :aria-invalid="!!errors.title"
-        :aria-describedby="errors.title ? 'title-error' : undefined"
-      />
-    </div>
-    <p v-if="errors.title" id="title-error" class="error">{{ errors.title }}</p>
+    <TaskTitleInput
+      ref="titleField"
+      v-model="input.title"
+      :category="input.category"
+      :error="errors.title"
+      @reuse="reuse"
+    />
     <div class="details">
       <div>
         <label for="task-duration">Estimated minutes</label>
@@ -126,8 +133,9 @@ async function submit() {
             ><AppIcon name="down" />
           </button>
           <Transition name="panel">
-            <div
+            <FloatingMenu
               v-if="categoryOpen"
+              placement="below"
               id="category-options"
               class="category-options"
               role="listbox"
@@ -148,7 +156,7 @@ async function submit() {
                   >&#10003;</span
                 >
               </button>
-            </div>
+            </FloatingMenu>
           </Transition>
         </div>
       </div>
@@ -175,6 +183,12 @@ async function submit() {
 </template>
 <style scoped lang="scss">
 form {
+  --glass-fill: var(--form-glass-fill);
+  --glass-hover: var(--form-glass-hover);
+  --glass-edge: var(--form-glass-edge);
+  --glass-highlight: var(--form-glass-highlight);
+  position: relative;
+  isolation: isolate;
   text-align: left;
 }
 .priority-picker {
@@ -231,8 +245,13 @@ form {
     cursor: pointer;
     &:checked + span {
       color: var(--text);
-      border-color: #d990703d;
-      background: linear-gradient(115deg, #e67d4826, #c44d3820 58%, #ffffff09);
+      border-color: rgb(var(--ambient-warm) / 24%);
+      background: linear-gradient(
+        115deg,
+        rgb(var(--ambient-warm) / 13%),
+        rgb(var(--ambient-rose) / 7%) 70%,
+        #ffffff04
+      );
       box-shadow: inset 0 1px 0 #ffffff08;
     }
     &:focus-visible + span {
@@ -355,8 +374,8 @@ select option {
   margin-top: 16px;
 }
 .actions {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
   margin-top: 16px;
   .primary {
@@ -372,17 +391,27 @@ select option {
       background: var(--glass-hover);
     }
     justify-content: center;
-    padding-inline: 16px;
+    padding-inline: 16px 40px;
     svg {
       position: absolute;
       right: 16px;
     }
   }
   .quiet {
-    align-self: center;
-    border-color: transparent;
+    height: 36px;
+    min-width: 88px;
+    padding-inline: 16px;
+    border-color: var(--glass-edge);
+    border-radius: var(--control-radius);
+    background: var(--glass-fill);
+    backdrop-filter: blur(var(--surface-blur));
+    box-shadow: var(--glass-highlight);
     color: var(--muted);
     font-size: 12px;
+    &:hover {
+      background: var(--glass-hover);
+      color: var(--text);
+    }
   }
 }
 .error {
@@ -412,17 +441,8 @@ select option {
   }
 }
 .category-options {
-  position: absolute;
-  bottom: calc(100% + 8px);
-  left: 0;
-  right: 0;
-  z-index: 10;
   padding: 5px;
-  border: 1px solid var(--border);
   border-radius: var(--panel-radius);
-  background: var(--surface);
-  box-shadow: var(--surface-shadow);
-  backdrop-filter: blur(var(--surface-blur));
   button {
     width: 100%;
     gap: 10px;

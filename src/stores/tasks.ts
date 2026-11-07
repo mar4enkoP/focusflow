@@ -1,5 +1,6 @@
 ﻿import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
+import { useTaskMemoryStore } from './taskMemory'
 export const categories = ['Work', 'Study', 'Personal', 'Health', 'Reading'] as const
 export type Category = (typeof categories)[number]
 export const priorities = ['High', 'Medium', 'Low'] as const
@@ -30,6 +31,7 @@ export function validateTask(input: TaskInput) {
   }
 }
 export const useTasksStore = defineStore('tasks', () => {
+  const memory = useTaskMemoryStore()
   const tasks = ref<Task[]>([])
   const remaining = computed(() => tasks.value.filter((t) => !t.completed).length)
   const totalMinutes = computed(() =>
@@ -43,6 +45,7 @@ export const useTasksStore = defineStore('tasks', () => {
       if (!task) return false
       Object.assign(task, values)
     } else tasks.value.push({ ...values, id: crypto.randomUUID(), completed: false })
+    memory.remember(values)
     return true
   }
   function remove(id: string) {
