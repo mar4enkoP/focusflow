@@ -64,53 +64,52 @@ function save(input: TaskInput) {
         aria-label="FocusFlow home"
         @click.prevent="store.tasks.length ? showList() : create()"
         ><AppIcon name="brand" />FocusFlow</a
-      ><span class="header-note">A little less noise. A little more focus.</span>
+      >
     </header>
     <main>
-      <section v-if="view === 'form'" class="creation" aria-labelledby="creation-title">
-        <div class="orb" aria-hidden="true"><AppIcon :name="editing ? 'edit' : 'plus'" /></div>
-        <h1 id="creation-title">{{ title }}</h1>
-        <p class="intro">Choose what you'd like to focus on,<br />and how much time to give it.</p>
-        <TaskForm :key="editing?.id ?? 'new'" :task="editing" @save="save" @cancel="showList" />
-      </section>
-      <FocusTimer v-else-if="view === 'focus'" />
-      <section v-else class="task-panel" aria-labelledby="list-title">
-        <div class="panel-heading">
-          <div>
-            <h1 id="list-title" ref="heading" tabindex="-1">
-              Tasks <span>{{ store.tasks.length }}</span>
-            </h1>
+      <Transition
+        name="panel"
+        mode="out-in"
+        appear
+        @after-enter="view === 'list' && heading?.focus()"
+        @before-leave="(element) => element.setAttribute('inert', '')"
+      >
+        <section v-if="view === 'form'" class="creation" aria-labelledby="creation-title">
+          <div class="orb" aria-hidden="true"><AppIcon :name="editing ? 'edit' : 'plus'" /></div>
+          <h1 id="creation-title">{{ title }}</h1>
+          <p class="intro">
+            Choose what you'd like to focus on,<br />and how much time to give it.
+          </p>
+          <TaskForm :key="editing?.id ?? 'new'" :task="editing" @save="save" @cancel="showList" />
+        </section>
+        <FocusTimer v-else-if="view === 'focus'" />
+        <section v-else class="task-panel" aria-labelledby="list-title">
+          <div class="orb" aria-hidden="true"><AppIcon name="list" /></div>
+          <h1 id="list-title" ref="heading" tabindex="-1">Your tasks</h1>
+          <div class="panel-heading">
+            <span class="task-count"
+              >Tasks <span>{{ store.tasks.length }}</span></span
+            >
+            <button
+              v-if="store.tasks.length"
+              aria-label="Add a task"
+              title="Add a task"
+              @click="create"
+            >
+              <AppIcon name="plus" /><span>Add task</span>
+            </button>
           </div>
-          <button
-            v-if="store.tasks.length"
-            aria-label="Add a task"
-            title="Add a task"
-            @click="create"
-          >
-            <AppIcon name="plus" />
+          <TaskList v-if="store.tasks.length" @edit="edit" @select="focus" />
+          <div v-if="!store.tasks.length" class="empty">
+            <AppIcon name="list" />
+            <h2>No tasks yet</h2>
+            <button class="primary" @click="create"><AppIcon name="plus" />Create a task</button>
+          </div>
+          <button v-if="store.remaining" class="primary start-focus" @click="startFocus">
+            Start Focus<AppIcon name="arrow" />
           </button>
-        </div>
-        <TaskList v-if="store.tasks.length" @edit="edit" @select="focus" />
-        <p v-if="timer.task" class="list-note">
-          Switching pauses your timer. Deleting or completing its task ends that session.
-        </p>
-        <div v-if="!store.tasks.length" class="empty">
-          <AppIcon name="list" />
-          <h2>A clear space, a fresh start.</h2>
-          <p>Add one small thing you'd like to get done.</p>
-          <button class="primary" @click="create"><AppIcon name="plus" />Create a task</button>
-        </div>
-        <button v-if="store.remaining" class="primary start-focus" @click="startFocus">
-          Start Focus<AppIcon name="arrow" />
-        </button>
-        <p v-if="store.tasks.length" class="list-note">
-          {{
-            store.remaining
-              ? 'Small steps. In your own order.'
-              : 'All done. Take a moment for yourself.'
-          }}
-        </p>
-      </section>
+        </section>
+      </Transition>
     </main>
     <footer>
       <button
@@ -167,12 +166,6 @@ function save(input: TaskInput) {
       padding-bottom: 16px;
       gap: 16px;
     }
-    .header-note {
-      display: none;
-    }
-  }
-  &.is-creating .header-note {
-    display: none;
   }
 }
 
@@ -191,10 +184,6 @@ header {
   font-size: 14px;
   letter-spacing: -0.3px;
 }
-.header-note {
-  color: var(--muted);
-  font-size: 11px;
-}
 main {
   flex: 1;
   display: flex;
@@ -202,7 +191,8 @@ main {
   justify-content: center;
   padding: 48px 24px 64px;
 }
-.creation {
+.creation,
+.task-panel {
   width: 356px;
   max-width: 100%;
   text-align: center;
@@ -293,11 +283,6 @@ h1 {
     margin-bottom: 24px;
   }
 }
-.list-note {
-  color: var(--muted);
-  font-size: 11px;
-  margin: 20px 0 0;
-}
 footer {
   padding: 0 24px 24px;
   display: flex;
@@ -335,14 +320,8 @@ footer {
   header {
     padding: 24px;
   }
-  .header-note {
-    display: none;
-  }
   main {
     padding: 28px 16px 40px;
-  }
-  .task-panel {
-    padding: 20px;
   }
   h1 {
     font-size: 20px;
@@ -428,49 +407,46 @@ progress {
 }
 
 .task-panel {
-  width: 480px;
+  width: 420px;
   max-width: 100%;
-  padding: 20px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--panel-radius);
-  backdrop-filter: blur(var(--surface-blur));
-  box-shadow: var(--surface-shadow);
 }
 .panel-heading {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
-  h1 {
-    font-size: 16px;
-    font-weight: 500;
-    letter-spacing: -0.2px;
-  }
-  h1 span {
+  margin: 20px 0 12px;
+  .task-count {
     color: var(--muted);
-    font-size: 12px;
-    margin-left: 8px;
+    font-size: 11px;
+    span {
+      margin-left: 8px;
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }
   }
   > button {
-    width: 32px;
-    height: 32px;
-    padding: 0;
+    height: 28px;
+    padding: 0 10px;
+    font-size: 11px;
     border-radius: var(--control-radius);
+    svg {
+      width: 14px;
+      height: 14px;
+    }
   }
 }
 .start-focus {
+  position: relative;
   margin-top: 20px;
   width: 100%;
   height: 36px;
   border-radius: var(--control-radius);
   border-color: #ffffff30;
-  background: #ffffff10;
-  justify-content: space-between;
-}
-@media (max-width: 420px) {
-  .task-panel {
-    padding: 16px;
+  background: linear-gradient(110deg, #ffffff07, #ffffff04);
+  justify-content: center;
+  svg {
+    position: absolute;
+    right: 16px;
   }
 }
 </style>

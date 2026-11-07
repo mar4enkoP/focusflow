@@ -183,6 +183,9 @@ label {
   border-radius: var(--control-radius);
   background: linear-gradient(110deg, #ffffff07, #ffffff04);
   color: var(--muted);
+  transition:
+    border-color var(--motion-fast),
+    background var(--motion-fast);
   > svg {
     flex-shrink: 0;
     width: 18px;
@@ -233,8 +236,8 @@ select {
   pointer-events: none;
 }
 .field:focus-within {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 3px;
+  border-color: var(--focus-ring);
+  outline: none;
 }
 input::placeholder {
   color: #929097;
@@ -339,6 +342,6 @@ select option {
 }
 .selected-mark {
   margin-left: auto;
-  color: #eab5a7;
+  color: var(--text);
 }
 </style>

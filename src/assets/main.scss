@@ -9,7 +9,8 @@
   --control-radius: 10px;
   --surface-blur: 16px;
   --surface-shadow: 0 16px 48px #0005, inset 0 1px 0 #ffffff04;
-  --focus-ring: #e5a18d;
+  --focus-ring: #88858e;
+  --motion-ease: cubic-bezier(0.22, 1, 0.36, 1);
   --motion-fast: 160ms;
   font-family:
     Inter,
@@ -58,8 +59,8 @@ button:disabled {
 button:focus-visible,
 input:focus-visible,
 select:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 4px;
+  outline: 1px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 button.icon-button {
   width: 28px;
@@ -96,11 +97,15 @@ button:active:not(:disabled) {
 .panel-enter-active,
 .panel-leave-active {
   transition:
-    opacity var(--motion-fast),
-    transform var(--motion-fast);
+    opacity 200ms ease,
+    transform 200ms var(--motion-ease);
+}
+.panel-leave-active {
+  transition-duration: 120ms;
+  pointer-events: none;
 }
 .panel-enter-from,
 .panel-leave-to {
   opacity: 0;
-  transform: translateY(4px);
+  transform: translateY(6px);
 }

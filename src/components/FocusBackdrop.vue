@@ -37,19 +37,20 @@ onBeforeUnmount(() => {
   if (frame !== undefined) cancelAnimationFrame(frame)
 })
 
-// The same open curve bends into a nearly closed circle; no rectangular paint or masks.
+// The open horizon closes fully at the top when it becomes a circle.
 const curve = computed(() => {
   const amount = bend.value
   const radiusX = 500 - 80 * amount
   const radiusY = 800 - 380 * amount
   const centerY = 500 * amount
-  const sweep = 1.35 + (Math.PI - 0.04 - 1.35) * amount
-  return Array.from({ length: 121 }, (_, index) => {
+  const sweep = 1.35 + (Math.PI - 1.35) * amount
+  const path = Array.from({ length: 121 }, (_, index) => {
     const angle = -sweep + (2 * sweep * index) / 120
     const x = 500 + radiusX * Math.sin(angle)
     const y = centerY + radiusY * Math.cos(angle)
     return `${index ? 'L' : 'M'}${x.toFixed(3)},${y.toFixed(3)}`
   }).join(' ')
+  return amount === 1 ? `${path} Z` : path
 })
 </script>
 
@@ -222,6 +223,10 @@ const curve = computed(() => {
 }
 .focus-backdrop[data-mode='form'] .horizon {
   opacity: 0.3;
+}
+.focus-backdrop[data-mode='list'] .horizon {
+  width: min(1052px, calc(100vw - 16px), calc(100svh - 24px));
+  height: min(1052px, calc(100vw - 16px), calc(100svh - 24px));
 }
 @media (prefers-reduced-motion: reduce) {
   .horizon {

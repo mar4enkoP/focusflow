@@ -105,10 +105,13 @@ defineEmits<{ edit: [task: Task]; select: [id: string] }>()
 </template>
 <style scoped lang="scss">
 .tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   margin: 0 -6px;
   padding: 4px 6px;
   list-style: none;
-  max-height: min(46vh, 420px);
+  max-height: min(34vh, 300px);
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: #ffffff30 transparent;
@@ -118,25 +121,54 @@ li {
   display: grid;
   grid-template-columns: 18px 16px 16px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
-  padding: 12px 4px;
-  min-height: 64px;
-  border-bottom: 1px solid var(--border);
-  transition: background var(--motion-fast);
-  &:last-child {
-    border-bottom: 0;
-  }
+  gap: 10px;
+  padding: 10px;
+  min-height: 58px;
+  border: 1px solid var(--border);
+  border-radius: var(--control-radius);
+  background: linear-gradient(110deg, #ffffff07, #ffffff04);
+  text-align: left;
+  transition:
+    background var(--motion-fast),
+    border-color var(--motion-fast);
   &:hover,
   &:focus-within {
     background: var(--surface-hover);
+    border-color: #ffffff30;
   }
 }
 input {
-  accent-color: #ece5e1;
+  appearance: none;
+  display: grid;
+  place-content: center;
+  border: 1px solid var(--focus-ring);
+  border-radius: 5px;
+  background: #ffffff04;
   width: 16px;
   height: 16px;
   margin: 0;
   cursor: pointer;
+  &::after {
+    content: '';
+    width: 7px;
+    height: 4px;
+    border-left: 1px solid var(--text);
+    border-bottom: 1px solid var(--text);
+    transform: translateY(-1px) rotate(-45deg);
+    visibility: hidden;
+  }
+  &:checked {
+    background: #ffffff18;
+    &::after {
+      visibility: visible;
+    }
+  }
+  @media (forced-colors: active) {
+    appearance: auto;
+    &::after {
+      display: none;
+    }
+  }
 }
 svg {
   flex-shrink: 0;
