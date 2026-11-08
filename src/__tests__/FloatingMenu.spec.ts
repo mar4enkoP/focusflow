@@ -5,7 +5,7 @@ import FloatingMenu from '@/components/FloatingMenu.vue'
 afterEach(() => vi.restoreAllMocks())
 
 it('opens in the browser top layer and follows its anchor on resize', () => {
-  const showPopover = vi.fn(function (this: HTMLElement) {
+  const showPopover = vi.fn<(this: HTMLElement) => void>(function () {
     expect(this.style.position).toBe('fixed')
     expect(this.style.top).toBe('240px')
     expect(this.style.width).toBe('356px')
