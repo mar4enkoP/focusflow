@@ -33,20 +33,20 @@ oversized cards, and a mobile interface stretched across a desktop.
 These values are implementation starting points; tune them against the reference at
 both target viewport sizes while preserving the composition above.
 
-| Element | Direction |
-| --- | --- |
-| Canvas | Nearly black, around `#09090b` |
-| Surfaces | Soft translucent charcoal, roughly `rgba(24, 23, 26, 0.72)` |
-| Borders | Delicate 1 px white at roughly 8–12% opacity |
-| Text | Off-white primary (`#eeeeef`), muted gray secondary (`#a5a2a8`) |
-| Accent | Restrained orange-red, around `#f05236`, used sparingly |
-| Blur | Subtle background blur, roughly 12–20 px on floating surfaces |
-| Corners | 10–16 px panels; pill-shaped docks and appropriate compact controls |
-| Spacing | Consistent 4 px base; use 8, 12, 16, 24, 32, and 48 px steps |
-| Type | System sans-serif initially; small, refined labels and thin timer numerals |
-| Sizes | Body 13–14 px, labels 11–12 px, panel titles 15–18 px |
-| Timer | Roughly 88–120 px desktop numerals; tabular figures to prevent shifting |
-| Controls | Standard desktop buttons approximately 28–36 px high; icons 14–18 px |
+| Element  | Direction                                                                  |
+| -------- | -------------------------------------------------------------------------- |
+| Canvas   | Nearly black, around `#09090b`                                             |
+| Surfaces | Soft translucent charcoal, roughly `rgba(24, 23, 26, 0.72)`                |
+| Borders  | Delicate 1 px white at roughly 8–12% opacity                               |
+| Text     | Off-white primary (`#eeeeef`), muted gray secondary (`#a5a2a8`)            |
+| Accent   | Restrained orange-red, around `#f05236`, used sparingly                    |
+| Blur     | Subtle background blur, roughly 12–20 px on floating surfaces              |
+| Corners  | 10–16 px panels; pill-shaped docks and appropriate compact controls        |
+| Spacing  | Consistent 4 px base; use 8, 12, 16, 24, 32, and 48 px steps               |
+| Type     | System sans-serif initially; small, refined labels and thin timer numerals |
+| Sizes    | Body 13–14 px, labels 11–12 px, panel titles 15–18 px                      |
+| Timer    | Roughly 88–120 px desktop numerals; tabular figures to prevent shifting    |
+| Controls | Standard desktop buttons approximately 28–36 px high; icons 14–18 px       |
 
 Use subtle glassmorphism, shallow shadows, and delicate highlights. A primary timer
 button may be slightly larger (around 40 px), but remain understated. Keep normal text
