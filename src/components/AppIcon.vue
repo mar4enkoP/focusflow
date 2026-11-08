@@ -20,6 +20,9 @@ const paths: Record<string, string> = {
   pause: 'M6 4h4v16H6z M14 4h4v16h-4z',
   next: 'm5 5 11 7-11 7Z M19 5v14',
   layers: 'm3 7 9-5 9 5-9 5-9-5m0 5 9 5 9-5M3 17l9 5 9-5',
+  chart: 'M4 20V11M10 20V4M16 20v-7M22 20V8',
+  close: 'm6 6 12 12M6 18 18 6',
+  check: 'm5 12 4 4L19 6',
 }
 </script>
 <template>

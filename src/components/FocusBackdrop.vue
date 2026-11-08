@@ -1,7 +1,7 @@
 ﻿<script setup lang="ts">
 import { computed, onBeforeUnmount, watch, useId, ref } from 'vue'
 
-const props = withDefaults(defineProps<{ mode?: 'focus' | 'list' | 'form' }>(), {
+const props = withDefaults(defineProps<{ mode?: 'focus' | 'list' | 'form' | 'workspace' }>(), {
   mode: 'focus',
 })
 const gradientId = useId()
@@ -10,24 +10,29 @@ const focusGradientId = useId()
 const fadeId = useId()
 const maskId = useId()
 const blurId = useId()
-const bend = ref(props.mode === 'focus' ? 0 : 1)
+const bend = ref(props.mode === 'focus' || props.mode === 'workspace' ? 0 : 1)
+const flat = ref(props.mode === 'workspace' ? 1 : 0)
 let frame: number | undefined
 
 watch(
   () => props.mode,
   (mode) => {
     if (frame !== undefined) cancelAnimationFrame(frame)
-    const target = mode === 'focus' ? 0 : 1
+    const target = mode === 'focus' || mode === 'workspace' ? 0 : 1
+    const flatTarget = mode === 'workspace' ? 1 : 0
     if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
       bend.value = target
+      flat.value = flatTarget
       return
     }
     const from = bend.value
+    const flatFrom = flat.value
     const start = performance.now()
     const animate = (now: number) => {
       const elapsed = Math.min((now - start) / 900, 1)
       const eased = 1 - Math.pow(1 - elapsed, 3)
       bend.value = from + (target - from) * eased
+      flat.value = flatFrom + (flatTarget - flatFrom) * eased
       if (elapsed < 1) frame = requestAnimationFrame(animate)
     }
     frame = requestAnimationFrame(animate)
@@ -47,7 +52,8 @@ const curve = computed(() => {
   const path = Array.from({ length: 121 }, (_, index) => {
     const angle = -sweep + (2 * sweep * index) / 120
     const x = 500 + radiusX * Math.sin(angle)
-    const y = centerY + radiusY * Math.cos(angle)
+    const curvedY = centerY + radiusY * Math.cos(angle)
+    const y = curvedY + (800 - curvedY) * flat.value
     return `${index ? 'L' : 'M'}${x.toFixed(3)},${y.toFixed(3)}`
   }).join(' ')
   return amount === 1 ? `${path} Z` : path
@@ -66,7 +72,16 @@ const curve = computed(() => {
           <stop offset="80%" stop-color="#f01840" />
           <stop offset="100%" stop-color="#d82b26" stop-opacity="0.12" />
         </linearGradient>
-        <linearGradient :id="focusGradientId" x1="0%" y1="0%" x2="100%" y2="0%">
+        <!-- A straight path has zero bounding-box height: use SVG coordinates so
+             its gradient remains visible after the morph finishes. -->
+        <linearGradient
+          :id="focusGradientId"
+          gradientUnits="userSpaceOnUse"
+          x1="0"
+          y1="0"
+          x2="1000"
+          y2="0"
+        >
           <stop offset="0%" stop-color="#a51226" stop-opacity="0" />
           <stop offset="12%" stop-color="#db2525" stop-opacity="0.25" />
           <stop offset="30%" stop-color="#ff401c" />
@@ -77,7 +92,7 @@ const curve = computed(() => {
           <stop offset="100%" stop-color="#8b102b" stop-opacity="0" />
         </linearGradient>
         <clipPath :id="interiorId">
-          <path :d="`${curve} Z`" />
+          <path :d="flat > 0 ? `${curve} L1000,-500 L0,-500 Z` : `${curve} Z`" />
         </clipPath>
         <linearGradient :id="fadeId" x1="0" y1="0" x2="0" y2="1000" gradientUnits="userSpaceOnUse">
           <stop offset="20%" stop-color="white" stop-opacity="0" />
@@ -87,13 +102,34 @@ const curve = computed(() => {
         <mask :id="maskId" maskUnits="userSpaceOnUse" x="-200" y="-500" width="1400" height="2000">
           <rect x="-200" y="-500" width="1400" height="2000" :fill="`url(#${fadeId})`" />
         </mask>
-        <filter :id="`${blurId}-halo`" x="-50%" y="-100%" width="200%" height="300%">
+        <filter
+          :id="`${blurId}-halo`"
+          filterUnits="userSpaceOnUse"
+          x="-500"
+          y="-1000"
+          width="2000"
+          height="3000"
+        >
           <feGaussianBlur stdDeviation="20 110" />
         </filter>
-        <filter :id="`${blurId}-band`" x="-50%" y="-100%" width="200%" height="300%">
+        <filter
+          :id="`${blurId}-band`"
+          filterUnits="userSpaceOnUse"
+          x="-500"
+          y="-1000"
+          width="2000"
+          height="3000"
+        >
           <feGaussianBlur stdDeviation="12 65" />
         </filter>
-        <filter :id="`${blurId}-core`" x="-50%" y="-100%" width="200%" height="300%">
+        <filter
+          :id="`${blurId}-core`"
+          filterUnits="userSpaceOnUse"
+          x="-500"
+          y="-1000"
+          width="2000"
+          height="3000"
+        >
           <feGaussianBlur stdDeviation="4 24" />
         </filter>
       </defs>
@@ -219,14 +255,17 @@ const curve = computed(() => {
   height: min(956px, calc(100vw - 32px), calc(100svh - 96px));
   bottom: 50%;
   transform: translate(-50%, calc(50% + 32px));
-  opacity: 0.38;
+  opacity: 0.62;
 }
 .focus-backdrop[data-mode='form'] .horizon {
-  opacity: 0.3;
+  opacity: 0.54;
 }
 .focus-backdrop[data-mode='list'] .horizon {
   width: min(1052px, calc(100vw - 16px), calc(100svh - 24px));
   height: min(1052px, calc(100vw - 16px), calc(100svh - 24px));
+}
+.focus-backdrop[data-mode='workspace'] .horizon {
+  width: min(2040px, 110vw);
 }
 @media (prefers-reduced-motion: reduce) {
   .horizon {

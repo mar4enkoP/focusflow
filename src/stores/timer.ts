@@ -2,9 +2,11 @@ import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 import { useTasksStore } from './tasks'
 import { useFocusHistoryStore } from './focusHistory'
+import { usePlannerStore } from './planner'
 export const useTimerStore = defineStore('timer', () => {
   const tasks = useTasksStore()
   const history = useFocusHistoryStore()
+  const planner = usePlannerStore()
   const selectedId = ref<string>()
   const remaining = ref(0)
   const budget = ref(0)
@@ -51,6 +53,7 @@ export const useTimerStore = defineStore('timer', () => {
     if (!task.value || task.value.completed || state.value === 'running' || remaining.value <= 0)
       return
     history.begin(task.value)
+    planner.begin(task.value.id)
     deadline.value = Date.now() + remaining.value
     state.value = 'running'
   }
@@ -82,7 +85,10 @@ export const useTimerStore = defineStore('timer', () => {
     selectedId.value = undefined
     reset()
     saved.delete(oldId)
-    const next = ordered.find((t) => !t.completed)
+    const inPlan = planner.accepted?.activeId === oldId
+    const next = inPlan
+      ? tasks.tasks.find((t) => t.id === planner.nextId)
+      : ordered.find((t) => !t.completed)
     if (next) select(next.id)
   }
   function complete() {

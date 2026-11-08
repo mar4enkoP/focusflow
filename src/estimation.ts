@@ -8,6 +8,8 @@ export interface FocusSession {
   actualMs: number
   since?: number
   reliable: boolean
+  category?: string
+  intervals?: { start: number; end: number }[]
 }
 export interface Observation extends Omit<FocusSession, 'since'> {
   completedAt: number
@@ -30,6 +32,20 @@ export function validSession(value: unknown): value is FocusSession {
     s.plannedMinutes <= 1440 &&
     integer(s.actualMs) &&
     typeof s.reliable === 'boolean' &&
+    (s.category === undefined ||
+      ['Work', 'Study', 'Personal', 'Health', 'Reading'].includes(s.category)) &&
+    (s.intervals === undefined ||
+      (Array.isArray(s.intervals) &&
+        s.intervals.every(
+          (interval, index) =>
+            interval &&
+            integer(interval.start) &&
+            integer(interval.end) &&
+            interval.end >= interval.start &&
+            (index === 0 || interval.start >= s.intervals![index - 1]!.end),
+        ) &&
+        s.intervals.reduce((total, interval) => total + interval.end - interval.start, 0) <=
+          s.actualMs)) &&
     (s.since === undefined || (integer(s.since) && s.since <= Date.now()))
   )
 }
@@ -39,6 +55,9 @@ export function validObservation(value: unknown): value is Observation {
     validSession(value) &&
     !('since' in value) &&
     integer(o.completedAt) &&
+    (!o.reliable ||
+      o.intervals === undefined ||
+      o.intervals.every((interval) => interval.end <= o.completedAt)) &&
     o.completedAt <= Date.now()
   )
 }

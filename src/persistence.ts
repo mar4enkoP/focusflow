@@ -4,6 +4,10 @@ import { useTasksStore, validateTask, type Task } from './stores/tasks'
 import { useTimerStore } from './stores/timer'
 import { normalizeTitle, useTaskMemoryStore, type TaskMemoryEntry } from './stores/taskMemory'
 import { useFocusHistoryStore } from './stores/focusHistory'
+import { usePlannerStore } from './stores/planner'
+import { validSettings } from './planning'
+export const PLAN_STORAGE_KEY = 'focusflow-plan'
+export const planNotice = ref('')
 
 export const STORAGE_KEY = 'focusflow'
 export const MEMORY_STORAGE_KEY = 'focusflow-memory'
@@ -131,6 +135,48 @@ export function installPersistence(pinia: Pinia) {
     { flush: 'sync' },
   )
   installMemoryPersistence(pinia, tasks.tasks)
+  installPlanPersistence(pinia)
+}
+
+function installPlanPersistence(pinia: Pinia) {
+  const planner = usePlannerStore(pinia)
+  let writable = true
+  let last: string | null = null
+  planNotice.value = ''
+  try {
+    last = localStorage.getItem(PLAN_STORAGE_KEY)
+    if (last !== null) {
+      const data = JSON.parse(last)
+      if (data?.version !== 1 || !planner.restore(data)) throw new Error('Invalid plan')
+    }
+  } catch {
+    writable = false
+    planNotice.value =
+      'Saved plan unavailable. Changes stay in this visit; saved data is preserved.'
+  }
+  let validPreferences = JSON.parse(JSON.stringify(planner.settings))
+  watch(
+    () => planner.snapshot(),
+    () => {
+      if (!writable) return
+      try {
+        if (validSettings(planner.settings))
+          validPreferences = JSON.parse(JSON.stringify(planner.settings))
+        const serialized = JSON.stringify({
+          version: 1,
+          ...planner.snapshot(),
+          settings: validPreferences,
+        })
+        if (serialized === last) return
+        localStorage.setItem(PLAN_STORAGE_KEY, serialized)
+        last = serialized
+        planNotice.value = ''
+      } catch {
+        planNotice.value = 'Could not save the plan. Changes stay in this visit.'
+      }
+    },
+    { deep: true, flush: 'sync' },
+  )
 }
 
 // A separate versioned key keeps damaged/unsupported memory independent of tasks

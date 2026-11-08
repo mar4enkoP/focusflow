@@ -6,9 +6,11 @@ import TaskForm from '@/components/TaskForm.vue'
 import TaskList from '@/components/TaskList.vue'
 import FocusTimer from '@/components/FocusTimer.vue'
 import FocusBackdrop from '@/components/FocusBackdrop.vue'
+import WorkspaceTools from '@/components/WorkspaceTools.vue'
 import { persistenceNotice } from './persistence'
 import { useTimerStore } from '@/stores/timer'
 const timer = useTimerStore()
+const workspaceOpen = ref(false)
 let pulse: ReturnType<typeof setInterval> | undefined
 onMounted(() => {
   pulse = setInterval(timer.sync, 250)
@@ -56,7 +58,7 @@ function save(input: TaskInput) {
 </script>
 <template>
   <div class="app-shell" :class="{ 'is-focus': view === 'focus', 'is-creating': view === 'form' }">
-    <FocusBackdrop :mode="view" />
+    <FocusBackdrop :mode="workspaceOpen ? 'workspace' : view" />
     <header>
       <a
         class="brand"
@@ -65,8 +67,13 @@ function save(input: TaskInput) {
         @click.prevent="store.tasks.length ? showList() : create()"
         ><AppIcon name="brand" />FocusFlow</a
       >
+      <WorkspaceTools @focus="focus" @active="workspaceOpen = $event" @tasks="showList" />
     </header>
-    <main>
+    <main
+      :class="{ 'workspace-hidden': workspaceOpen }"
+      :inert="workspaceOpen ? true : undefined"
+      :aria-hidden="workspaceOpen || undefined"
+    >
       <Transition
         name="panel"
         mode="out-in"
@@ -111,7 +118,11 @@ function save(input: TaskInput) {
         </section>
       </Transition>
     </main>
-    <footer>
+    <footer
+      :class="{ 'workspace-hidden': workspaceOpen }"
+      :inert="workspaceOpen ? true : undefined"
+      :aria-hidden="workspaceOpen || undefined"
+    >
       <button
         v-if="view === 'focus' && timer.task"
         class="task-dock focus-dock"
@@ -151,6 +162,13 @@ function save(input: TaskInput) {
   </div>
 </template>
 <style scoped lang="scss">
+.workspace-hidden {
+  // Descendants (including checked-task marks) can override visibility, but
+  // cannot escape the opacity of their containing screen.
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
 .app-shell {
   position: relative;
   isolation: isolate;
@@ -170,6 +188,7 @@ function save(input: TaskInput) {
 }
 
 header {
+  position: relative;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -335,13 +354,6 @@ footer {
     margin-left: auto;
     color: var(--muted);
   }
-}
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
 }
 @media (max-width: 600px) {
   header {

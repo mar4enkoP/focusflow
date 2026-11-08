@@ -18,6 +18,12 @@ export const useFocusHistoryStore = defineStore('focusHistory', () => {
     const elapsed = now - session.since
     // Background suspension, sleep, clock changes and long gaps are not proof of work.
     if (elapsed < 0 || elapsed > 5 * 60000) session.reliable = false
+    if (elapsed > 0 && session.intervals) {
+      const last = session.intervals[session.intervals.length - 1]
+      if (last?.end === session.since) last.end = now
+      else if (!last || last.end <= session.since)
+        session.intervals.push({ start: session.since, end: now })
+    }
     session.actualMs = Math.min(Number.MAX_SAFE_INTEGER, session.actualMs + Math.max(0, elapsed))
     session.since = now
     if (session.actualMs > MAX_RELIABLE_FOCUS_MS) session.reliable = false
@@ -32,6 +38,8 @@ export const useFocusHistoryStore = defineStore('focusHistory', () => {
         plannedMinutes: task.duration,
         actualMs: 0,
         reliable,
+        category: task.category,
+        intervals: [],
       }
       sessions.value.push(session)
       session = sessions.value[sessions.value.length - 1]!
