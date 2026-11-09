@@ -46,7 +46,7 @@ export function validSession(value: unknown): value is FocusSession {
         ) &&
         s.intervals.reduce((total, interval) => total + interval.end - interval.start, 0) <=
           s.actualMs)) &&
-    (s.since === undefined || (integer(s.since) && s.since <= Date.now()))
+    (s.since === undefined || integer(s.since))
   )
 }
 export function validObservation(value: unknown): value is Observation {
@@ -57,8 +57,7 @@ export function validObservation(value: unknown): value is Observation {
     integer(o.completedAt) &&
     (!o.reliable ||
       o.intervals === undefined ||
-      o.intervals.every((interval) => interval.end <= o.completedAt)) &&
-    o.completedAt <= Date.now()
+      o.intervals.every((interval) => interval.end <= o.completedAt))
   )
 }
 function median(values: number[]) {
@@ -69,6 +68,7 @@ function median(values: number[]) {
 // Latest nine reliable completions; median resists isolated outliers. Three samples
 // start a conservative 50% blend, rising to 80% at five. Preferences remain separate.
 export function estimateDuration(title: string, preferred: number, history: Observation[]) {
+  const now = Date.now()
   const fallback = Math.max(
     1,
     Math.min(1440, Number.isFinite(preferred) ? Math.round(preferred) : 25),
@@ -77,6 +77,7 @@ export function estimateDuration(title: string, preferred: number, history: Obse
     .filter(
       (o) =>
         o.reliable &&
+        o.completedAt <= now &&
         o.actualMs >= 60000 &&
         o.actualMs <= MAX_RELIABLE_FOCUS_MS &&
         normalizeTitle(o.title) === normalizeTitle(title),

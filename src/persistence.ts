@@ -32,8 +32,7 @@ function validTimer(value: Timer) {
     number(value.budget) &&
     value.remaining <= value.budget &&
     (value.selectedId === undefined || typeof value.selectedId === 'string') &&
-    (value.state !== 'running' ||
-      (number(value.deadline) && value.deadline <= Date.now() + value.budget)) &&
+    (value.state !== 'running' || number(value.deadline)) &&
     Array.isArray(value.saved) &&
     value.saved.every(
       ([id, session]) =>
@@ -128,6 +127,7 @@ function installSnapshot(pinia: Pinia, read: (key: string) => string | null) {
   const timer = useTimerStore(pinia)
   const history = useFocusHistoryStore(pinia)
   let writable = true
+  let recoveredClock = false
   let lastWritten: string | null = null
   try {
     const raw = read(STORAGE_KEY)
@@ -146,11 +146,12 @@ function installSnapshot(pinia: Pinia, read: (key: string) => string | null) {
             typeof t.completed === 'boolean' &&
             !Object.values(validateTask(t)).some(Boolean),
         ) ||
-        new Set(data.tasks.map((t) => t.id)).size !== data.tasks.length ||
-        !validTimer(data.timer)
+        new Set(data.tasks.map((t) => t.id)).size !== data.tasks.length
       )
         throw new Error('Invalid saved data')
       tasks.tasks = data.tasks.map((task) => ({ ...task, priority: task.priority ?? 'Medium' }))
+      // Recover valid tasks, but never overwrite malformed timer data with a fallback.
+      if (!validTimer(data.timer)) throw new Error('Invalid saved timer')
       if (data.version === 2 && !history.restore(data.focus, tasks.tasks, data.timer.selectedId)) {
         writable = false
         persistenceNotice.value =
@@ -177,7 +178,7 @@ function installSnapshot(pinia: Pinia, read: (key: string) => string | null) {
       )
         history.begin(active, false)
       if (active && !['running', 'expired'].includes(data.timer.state)) history.pause(active.id)
-      timer.restore(data.timer)
+      recoveredClock = timer.restore(data.timer) === true
     }
   } catch {
     writable = false
@@ -196,7 +197,9 @@ function installSnapshot(pinia: Pinia, read: (key: string) => string | null) {
       if (serialized === lastWritten) return
       localStorage.setItem(STORAGE_KEY, serialized)
       lastWritten = serialized
-      persistenceNotice.value = 'Saved on this device'
+      persistenceNotice.value = recoveredClock
+        ? 'Clock change detected. Timer paused; resume when ready. Saved on this device.'
+        : 'Saved on this device'
     } catch {
       persistenceNotice.value = 'Could not save on this device. Changes stay in this visit.'
     }
@@ -204,7 +207,18 @@ function installSnapshot(pinia: Pinia, read: (key: string) => string | null) {
   onScopeDispose(tasks.$subscribe(save, { detached: true, flush: 'sync' }))
   onScopeDispose(
     timer.$onAction(({ name, after }) => {
-      if (name !== 'sync' && name !== 'snapshot') after(save)
+      if (name === 'sync')
+        after((recovered) => {
+          if (recovered === true) {
+            recoveredClock = true
+            save()
+          }
+        })
+      else if (name !== 'snapshot')
+        after(() => {
+          if (name === 'start' || name === 'continueFocus') recoveredClock = false
+          save()
+        })
     }, true),
   )
   watch(
@@ -216,7 +230,11 @@ function installSnapshot(pinia: Pinia, read: (key: string) => string | null) {
   )
   const seedMemory = installMemoryPersistence(pinia, tasks.tasks, read)
   installPlanPersistence(pinia, read)
-  return seedMemory
+  return () => {
+    seedMemory()
+    // Called only after all keys are hydrated and editing is authorized under the lock.
+    if (recoveredClock) save()
+  }
 }
 
 function installPlanPersistence(pinia: Pinia, read: (key: string) => string | null) {

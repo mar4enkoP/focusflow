@@ -24,9 +24,23 @@ export const useTimerStore = defineStore('timer', () => {
   const saved = new Map<string, { remaining: number; budget: number }>()
   function sync() {
     if (!access.canMutate) return false
-    history.tick(selectedId.value)
+    const now = Date.now()
+    const session = history.sessions.find((s) => s.taskId === selectedId.value)
+    const rollback =
+      (session?.since !== undefined && session.since > now) ||
+      (state.value === 'running' &&
+        deadline.value !== undefined &&
+        deadline.value - now > remaining.value)
+    if (rollback) {
+      if (session) session.reliable = false
+      history.pause(selectedId.value, now)
+      deadline.value = undefined
+      if (state.value === 'running') state.value = 'paused'
+      return true
+    }
+    history.tick(selectedId.value, now)
     if (state.value !== 'running' || deadline.value === undefined) return
-    remaining.value = Math.min(budget.value, Math.max(0, deadline.value - Date.now()))
+    remaining.value = Math.min(budget.value, Math.max(0, deadline.value - now))
     if (!remaining.value) {
       state.value = 'expired'
       deadline.value = undefined
@@ -136,7 +150,7 @@ export const useTimerStore = defineStore('timer', () => {
     budget.value = active ? value.budget : 0
     state.value = active ? value.state : 'ready'
     deadline.value = active && value.state === 'running' ? value.deadline : undefined
-    sync()
+    return sync()
   }
   return {
     snapshot,
