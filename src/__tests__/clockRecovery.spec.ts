@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { disposePinia } from 'pinia'
 import { createOwnedPinia } from './workspaceTestUtils'
-import { installPersistence, STORAGE_KEY } from '../persistence'
+import { installPersistence, persistenceNotice, STORAGE_KEY } from '../persistence'
 import { useTasksStore } from '../stores/tasks'
 import { useTimerStore } from '../stores/timer'
 import { useFocusHistoryStore } from '../stores/focusHistory'
@@ -183,4 +183,77 @@ it('never extends or double-counts intervals on repeated negative ticks', () => 
     reliable: false,
     intervals: [{ start: epoch, end: epoch + 75_000 }],
   })
+})
+
+it.each(['observation', 'session', 'task', 'completed-session'] as const)(
+  'preserves conflicting %s records during rollback recovery and later edits',
+  (conflict) => {
+    setup()
+    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY)!)
+    const session = raw.focus.sessions[0]
+    const observation = {
+      sessionId: 'completed',
+      taskId: 'old-task',
+      title: 'Old task',
+      plannedMinutes: 30,
+      actualMs: 60_000,
+      reliable: true,
+      completedAt: epoch - 1000,
+    }
+    if (conflict === 'observation') {
+      raw.focus.observations = [observation, { ...observation, actualMs: 120_000 }]
+    } else if (conflict === 'session') {
+      raw.focus.sessions.push({ ...session, actualMs: 1000 })
+    } else if (conflict === 'task') {
+      raw.focus.sessions.push({ ...session, sessionId: 'different-session' })
+    } else {
+      raw.focus.observations = [{ ...observation, sessionId: session.sessionId }]
+    }
+    const original = JSON.stringify(raw)
+    localStorage.setItem(STORAGE_KEY, original)
+    vi.setSystemTime(epoch - 60_000)
+    vi.mocked(localStorage.setItem).mockClear()
+    const restored = boot()
+    expect(restored.timer.state).toBe('paused')
+    expect(localStorage.getItem(STORAGE_KEY)).toBe(original)
+    expect(persistenceNotice.value).toContain('preserved')
+    restored.tasks.save({ title: 'New task', duration: 10, category: 'Study' })
+    restored.timer.start()
+    expect(localStorage.getItem(STORAGE_KEY)).toBe(original)
+    expect(
+      vi.mocked(localStorage.setItem).mock.calls.filter(([key]) => key === STORAGE_KEY),
+    ).toEqual([])
+  },
+)
+
+it('deduplicates identical records regardless of object key order and saves recovery', () => {
+  setup()
+  const raw = JSON.parse(localStorage.getItem(STORAGE_KEY)!)
+  const session = raw.focus.sessions[0]
+  const observation = {
+    sessionId: 'completed',
+    taskId: 'old-task',
+    title: 'Old task',
+    plannedMinutes: 30,
+    actualMs: 60_000,
+    reliable: true,
+    completedAt: epoch - 1000,
+    intervals: [{ start: epoch - 61_000, end: epoch - 1000 }],
+  }
+  raw.focus.observations = [
+    observation,
+    {
+      ...Object.fromEntries(Object.entries(observation).reverse()),
+      intervals: [{ end: epoch - 1000, start: epoch - 61_000 }],
+    },
+  ]
+  raw.focus.sessions.push(Object.fromEntries(Object.entries(session).reverse()))
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(raw))
+  vi.setSystemTime(epoch - 60_000)
+  boot()
+  const saved = JSON.parse(localStorage.getItem(STORAGE_KEY)!)
+  expect(saved.timer.state).toBe('paused')
+  expect(saved.focus.observations).toEqual([observation])
+  expect(saved.focus.sessions).toHaveLength(1)
+  expect(persistenceNotice.value).not.toContain('preserved')
 })

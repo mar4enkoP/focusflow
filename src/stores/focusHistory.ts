@@ -10,6 +10,16 @@ import {
   type Observation,
 } from '@/estimation'
 
+// Compare all stored fields, including nested intervals, independently of object key order.
+// Unknown fields are included so differing data is never silently treated as a duplicate.
+function recordSignature(value: FocusSession | Observation) {
+  return JSON.stringify(value, (_key: string, item: unknown) =>
+    item && typeof item === 'object' && !Array.isArray(item)
+      ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b)))
+      : item,
+  )
+}
+
 export const useFocusHistoryStore = defineStore('focusHistory', () => {
   const access = useWorkspaceAccessStore()
   const sessions = ref<FocusSession[]>([])
@@ -84,16 +94,26 @@ export const useFocusHistoryStore = defineStore('focusHistory', () => {
     if (!value || typeof value !== 'object') return false
     const data = value as { sessions?: unknown; observations?: unknown }
     if (!Array.isArray(data.sessions) || !Array.isArray(data.observations)) return false
-    const seen = new Set<string>()
+    const seen = new Map<string, { kind: 'session' | 'observation'; signature: string }>()
     let valid = true
+    function unique(record: FocusSession | Observation, kind: 'session' | 'observation') {
+      const signature = recordSignature(record)
+      const previous = seen.get(record.sessionId)
+      if (previous) {
+        // A conflict makes persistence preserve the original raw snapshot. Only exact
+        // duplicates of the same record kind can be dropped without losing information.
+        if (previous.kind !== kind || previous.signature !== signature) valid = false
+        return false
+      }
+      seen.set(record.sessionId, { kind, signature })
+      return true
+    }
     observations.value = data.observations.filter((o): o is Observation => {
       if (!validObservation(o)) {
         valid = false
         return false
       }
-      if (seen.has(o.sessionId)) return false
-      seen.add(o.sessionId)
-      return true
+      return unique(o, 'observation')
     })
     const taskIds = new Set<string>()
     sessions.value = data.sessions.filter((s): s is FocusSession => {
@@ -101,15 +121,13 @@ export const useFocusHistoryStore = defineStore('focusHistory', () => {
         valid = false
         return false
       }
-      if (
-        seen.has(s.sessionId) ||
-        taskIds.has(s.taskId) ||
-        !tasks.some((t) => t.id === s.taskId && !t.completed)
-      )
+      if (!unique(s, 'session')) return false
+      if (taskIds.has(s.taskId)) {
+        valid = false
         return false
-      seen.add(s.sessionId)
+      }
       taskIds.add(s.taskId)
-      return true
+      return tasks.some((t) => t.id === s.taskId && !t.completed)
     })
     for (const session of sessions.value) {
       if (session.since !== undefined) {
