@@ -1,5 +1,6 @@
 ﻿import { beforeEach, afterEach, describe, it, expect, vi } from 'vitest'
-import { createPinia, setActivePinia } from 'pinia'
+import { setActivePinia } from 'pinia'
+import { createOwnedPinia as createPinia } from './workspaceTestUtils'
 import { useTasksStore } from '../stores/tasks'
 import { useTimerStore } from '../stores/timer'
 describe('focus timer', () => {

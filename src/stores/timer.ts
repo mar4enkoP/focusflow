@@ -1,9 +1,11 @@
+import { useWorkspaceAccessStore } from './workspaceAccess'
 import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 import { useTasksStore } from './tasks'
 import { useFocusHistoryStore } from './focusHistory'
 import { usePlannerStore } from './planner'
 export const useTimerStore = defineStore('timer', () => {
+  const access = useWorkspaceAccessStore()
   const tasks = useTasksStore()
   const history = useFocusHistoryStore()
   const planner = usePlannerStore()
@@ -21,6 +23,7 @@ export const useTimerStore = defineStore('timer', () => {
   )
   const saved = new Map<string, { remaining: number; budget: number }>()
   function sync() {
+    if (!access.canMutate) return false
     history.tick(selectedId.value)
     if (state.value !== 'running' || deadline.value === undefined) return
     remaining.value = Math.min(budget.value, Math.max(0, deadline.value - Date.now()))
@@ -30,6 +33,7 @@ export const useTimerStore = defineStore('timer', () => {
     }
   }
   function pause() {
+    if (!access.canMutate) return false
     sync()
     history.pause(selectedId.value)
     if (state.value === 'running') {
@@ -38,6 +42,7 @@ export const useTimerStore = defineStore('timer', () => {
     }
   }
   function select(id: string) {
+    if (!access.canMutate) return false
     const next = tasks.tasks.find((t) => t.id === id && !t.completed)
     if (!next || id === selectedId.value) return
     pause()
@@ -50,6 +55,7 @@ export const useTimerStore = defineStore('timer', () => {
     state.value = remaining.value ? 'ready' : 'expired'
   }
   function start() {
+    if (!access.canMutate) return false
     if (!task.value || task.value.completed || state.value === 'running' || remaining.value <= 0)
       return
     history.begin(task.value)
@@ -58,6 +64,7 @@ export const useTimerStore = defineStore('timer', () => {
     state.value = 'running'
   }
   function reset() {
+    if (!access.canMutate) return false
     history.pause(selectedId.value)
     deadline.value = undefined
     remaining.value = (task.value?.duration ?? 0) * 60000
@@ -65,6 +72,7 @@ export const useTimerStore = defineStore('timer', () => {
     state.value = 'ready'
   }
   function addTime() {
+    if (!access.canMutate) return false
     if (!task.value) return
     sync()
     remaining.value += 300000
@@ -76,10 +84,12 @@ export const useTimerStore = defineStore('timer', () => {
     }
   }
   function continueFocus() {
+    if (!access.canMutate) return false
     if (task.value && !task.value.completed && state.value === 'expired') history.begin(task.value)
     else start()
   }
   function advance(oldId: string) {
+    if (!access.canMutate) return false
     const index = tasks.tasks.findIndex((t) => t.id === oldId)
     const ordered = [...tasks.tasks.slice(index + 1), ...tasks.tasks.slice(0, index + 1)]
     selectedId.value = undefined
@@ -92,11 +102,13 @@ export const useTimerStore = defineStore('timer', () => {
     if (next) select(next.id)
   }
   function complete() {
+    if (!access.canMutate) return false
     if (task.value && !task.value.completed) tasks.toggle(task.value.id)
   }
   watch(
     () => tasks.tasks.map((t) => `${t.id}:${t.completed}`).join('|'),
     () => {
+      if (!access.canEdit) return
       if (selectedId.value && (!task.value || task.value.completed)) advance(selectedId.value)
       for (const id of saved.keys())
         if (!tasks.tasks.some((t) => t.id === id && !t.completed)) saved.delete(id)
@@ -114,6 +126,7 @@ export const useTimerStore = defineStore('timer', () => {
     }
   }
   function restore(value: ReturnType<typeof snapshot>) {
+    if (!access.canMutate) return false
     saved.clear()
     for (const [id, session] of value.saved)
       if (tasks.tasks.some((t) => t.id === id && !t.completed)) saved.set(id, session)

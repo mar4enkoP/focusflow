@@ -1,3 +1,4 @@
+import { useWorkspaceAccessStore } from './workspaceAccess'
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import type { Task } from './tasks'
@@ -10,9 +11,11 @@ import {
 } from '@/estimation'
 
 export const useFocusHistoryStore = defineStore('focusHistory', () => {
+  const access = useWorkspaceAccessStore()
   const sessions = ref<FocusSession[]>([])
   const observations = ref<Observation[]>([])
   function tick(id?: string, now = Date.now()) {
+    if (!access.canMutate) return false
     const session = sessions.value.find((s) => s.taskId === id)
     if (!session || session.since === undefined) return
     const elapsed = now - session.since
@@ -29,6 +32,7 @@ export const useFocusHistoryStore = defineStore('focusHistory', () => {
     if (session.actualMs > MAX_RELIABLE_FOCUS_MS) session.reliable = false
   }
   function begin(task: Task, reliable = true) {
+    if (!access.canMutate) return false
     let session = sessions.value.find((s) => s.taskId === task.id)
     if (!session) {
       session = {
@@ -47,11 +51,13 @@ export const useFocusHistoryStore = defineStore('focusHistory', () => {
     session.since ??= Date.now()
   }
   function pause(id?: string) {
+    if (!access.canMutate) return false
     tick(id)
     const session = sessions.value.find((s) => s.taskId === id)
     if (session) delete session.since
   }
   function finish(task: Task) {
+    if (!access.canMutate) return false
     pause(task.id)
     const session = sessions.value.find((s) => s.taskId === task.id)
     if (session && !observations.value.some((o) => o.sessionId === session.sessionId)) {
@@ -60,9 +66,11 @@ export const useFocusHistoryStore = defineStore('focusHistory', () => {
     discard(task.id)
   }
   function discard(id: string) {
+    if (!access.canMutate) return false
     sessions.value = sessions.value.filter((s) => s.taskId !== id)
   }
   function restore(value: unknown, tasks: Task[], activeId?: string) {
+    if (!access.canMutate) return false
     if (!value || typeof value !== 'object') return false
     const data = value as { sessions?: unknown; observations?: unknown }
     if (!Array.isArray(data.sessions) || !Array.isArray(data.observations)) return false

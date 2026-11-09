@@ -1,4 +1,5 @@
 ﻿<script setup lang="ts">
+import { useWorkspaceAccessStore } from '@/stores/workspaceAccess'
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { categories, priorities, validateTask, type Task, type TaskInput } from '@/stores/tasks'
 import AppIcon from './AppIcon.vue'
@@ -7,6 +8,7 @@ import TaskTitleInput from './TaskTitleInput.vue'
 import { normalizeTitle, useTaskMemoryStore, type TaskMemoryEntry } from '@/stores/taskMemory'
 import { useFocusHistoryStore } from '@/stores/focusHistory'
 import { estimateDuration } from '@/estimation'
+const access = useWorkspaceAccessStore()
 const props = defineProps<{ task?: Task }>()
 const emit = defineEmits<{ save: [input: TaskInput]; cancel: [] }>()
 const input = reactive<TaskInput>({
@@ -91,6 +93,7 @@ onMounted(() => document.addEventListener('pointerdown', outsideCategory))
 onUnmounted(() => document.removeEventListener('pointerdown', outsideCategory))
 onMounted(() => titleField.value?.focus())
 async function submit() {
+  if (!access.canEdit) return
   errors.value = validateTask(input)
   if (Object.values(errors.value).some(Boolean)) {
     await nextTick()
@@ -115,6 +118,7 @@ async function submit() {
         <label for="task-duration">Estimated minutes</label>
         <div class="field duration-field">
           <AppIcon name="clock" /><input
+            :disabled="!access.canEdit"
             id="task-duration"
             ref="durationField"
             v-model.number="input.duration"
@@ -136,6 +140,7 @@ async function submit() {
           @focusout="!categoryRoot?.contains($event.relatedTarget as Node) && closeCategory()"
         >
           <button
+            :disabled="!access.canEdit"
             id="task-category"
             ref="categoryButton"
             type="button"
@@ -162,6 +167,7 @@ async function submit() {
               @keydown="categoryKey"
             >
               <button
+                :disabled="!access.canEdit"
                 v-for="(category, index) in categories"
                 :key="category"
                 type="button"
@@ -183,21 +189,29 @@ async function submit() {
     <p v-if="errors.duration" id="duration-error" class="error">{{ errors.duration }}</p>
     <p v-if="estimate?.learned" class="estimate-help">
       Suggested: {{ estimate.minutes }} min · Based on {{ estimate.count }} completed sessions.
-      <button type="button" class="quiet" @click="applyEstimate">Use estimate</button>
+      <button :disabled="!access.canEdit" type="button" class="quiet" @click="applyEstimate">
+        Use estimate
+      </button>
     </p>
     <p v-if="errors.category" class="error">{{ errors.category }}</p>
     <fieldset class="priority-picker">
       <legend>Priority</legend>
       <div class="priority-options">
         <label v-for="priority in priorities" :key="priority">
-          <input v-model="input.priority" type="radio" name="priority" :value="priority" />
+          <input
+            :disabled="!access.canEdit"
+            v-model="input.priority"
+            type="radio"
+            name="priority"
+            :value="priority"
+          />
           <span>{{ priority }}</span>
         </label>
       </div>
     </fieldset>
     <p v-if="errors.priority" class="error">{{ errors.priority }}</p>
     <div class="actions">
-      <button type="submit" class="primary">
+      <button :disabled="!access.canEdit" type="submit" class="primary">
         {{ task ? 'Save changes' : 'Add task' }}<AppIcon name="arrow" />
       </button>
       <button type="button" class="quiet" @click="emit('cancel')">Cancel</button>

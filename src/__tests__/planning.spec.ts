@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { createPinia, setActivePinia } from 'pinia'
+import { setActivePinia } from 'pinia'
+import { createOwnedPinia as createPinia } from './workspaceTestUtils'
 import { mount } from '@vue/test-utils'
 import { generateSchedule, type PlanSettings } from '../planning'
 import { useTasksStore, type Task } from '../stores/tasks'

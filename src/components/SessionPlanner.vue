@@ -1,14 +1,27 @@
 <script setup lang="ts">
+import { useWorkspaceAccessStore } from '@/stores/workspaceAccess'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useTasksStore } from '@/stores/tasks'
 import { usePlannerStore } from '@/stores/planner'
 import { useTimerStore } from '@/stores/timer'
 import AppIcon from './AppIcon.vue'
+import type { PlanSettings } from '@/planning'
 import { planNotice } from '@/persistence'
+const access = useWorkspaceAccessStore()
 const emit = defineEmits<{ focus: [id: string] }>()
 const tasks = useTasksStore(),
   planner = usePlannerStore(),
   timer = useTimerStore()
+function setting<K extends keyof PlanSettings>(key: K) {
+  return computed({
+    get: () => planner.settings[key],
+    set: (value: PlanSettings[K]) => planner.updateSettings({ ...planner.settings, [key]: value }),
+  })
+}
+const minutes = setting('minutes')
+const breakMinutes = setting('breakMinutes')
+const breakEvery = setting('breakEvery')
+const selectedIds = setting('selectedIds')
 const now = ref(Date.now())
 let pulse: ReturnType<typeof setInterval> | undefined
 onMounted(() => {
@@ -25,6 +38,7 @@ function generate() {
 }
 const remaining = computed(() => Math.floor(planner.remaining(now.value)))
 function openFocus(id: string) {
+  if (!access.canEdit) return
   if (timer.isFocusing && timer.selectedId !== id) {
     planner.error = 'Pause the current task in Focus Mode before switching.'
     return
@@ -38,7 +52,8 @@ function openFocus(id: string) {
       <div class="inputs">
         <label
           >Time (min)<input
-            v-model.number="planner.settings.minutes"
+            :disabled="!access.canEdit"
+            v-model.number="minutes"
             type="number"
             min="1"
             max="1440"
@@ -46,7 +61,8 @@ function openFocus(id: string) {
         /></label>
         <label
           >Break (min)<input
-            v-model.number="planner.settings.breakMinutes"
+            :disabled="!access.canEdit"
+            v-model.number="breakMinutes"
             type="number"
             min="0"
             max="60"
@@ -54,7 +70,8 @@ function openFocus(id: string) {
         /></label>
         <label
           >Every (tasks)<input
-            v-model.number="planner.settings.breakEvery"
+            :disabled="!access.canEdit"
+            v-model.number="breakEvery"
             type="number"
             min="1"
             max="20"
@@ -70,7 +87,12 @@ function openFocus(id: string) {
           class="task-choice"
           :class="{ selected: planner.settings.selectedIds.includes(task.id) }"
         >
-          <input v-model="planner.settings.selectedIds" type="checkbox" :value="task.id" />
+          <input
+            :disabled="!access.canEdit"
+            v-model="selectedIds"
+            type="checkbox"
+            :value="task.id"
+          />
           <AppIcon :name="task.category" /><span>{{ task.title }}</span
           ><small>{{ task.priority }} · {{ task.duration }} min</small>
         </label>
@@ -78,7 +100,7 @@ function openFocus(id: string) {
       <button
         type="submit"
         class="generate primary"
-        :disabled="!planner.settings.selectedIds.length"
+        :disabled="!access.canEdit || !planner.settings.selectedIds.length"
       >
         Plan session<AppIcon name="arrow" />
       </button>
@@ -91,6 +113,7 @@ function openFocus(id: string) {
       <div class="section-heading">
         <h3>{{ planner.proposal ? 'Proposed schedule' : 'Accepted session' }}</h3>
         <button
+          :disabled="!access.canEdit"
           type="button"
           class="edit-plan"
           @click="editing = true"
@@ -146,7 +169,7 @@ function openFocus(id: string) {
               tasks.tasks.some((t) => t.id === slot.taskId && !t.completed)
             "
             type="button"
-            :disabled="remaining <= 0"
+            :disabled="!access.canEdit || remaining <= 0"
             :aria-label="`Focus on planned ${slot.title}`"
             @click="openFocus(slot.taskId)"
           >
@@ -164,11 +187,15 @@ function openFocus(id: string) {
         </ul>
       </div>
       <div class="actions" v-if="planner.proposal">
-        <button type="button" class="primary" @click="planner.accept()">Accept plan</button>
-        <button type="button" @click="planner.reject">Discard</button>
+        <button :disabled="!access.canEdit" type="button" class="primary" @click="planner.accept()">
+          Accept plan
+        </button>
+        <button :disabled="!access.canEdit" type="button" @click="planner.reject">Discard</button>
       </div>
       <div class="actions" v-else>
-        <button type="button" @click="planner.generate(true)">Recalculate</button>
+        <button :disabled="!access.canEdit" type="button" @click="planner.generate(true)">
+          Recalculate
+        </button>
       </div>
     </section>
     <section class="method" aria-label="Planning details">

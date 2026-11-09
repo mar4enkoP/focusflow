@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { createPinia, setActivePinia } from 'pinia'
+import { setActivePinia } from 'pinia'
+import { createOwnedPinia as createPinia } from './workspaceTestUtils'
 import { addDays, dayStart, localDay, summarize } from '../analytics'
 import { validObservation, type Observation } from '../estimation'
 import { useTasksStore } from '../stores/tasks'

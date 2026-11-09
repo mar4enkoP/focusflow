@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useWorkspaceAccessStore } from '@/stores/workspaceAccess'
 import { computed, nextTick, ref, useId } from 'vue'
 import { useTaskMemoryStore, type TaskMemoryEntry } from '@/stores/taskMemory'
 import { memoryNotice } from '@/persistence'
@@ -6,6 +7,7 @@ import type { Category } from '@/stores/tasks'
 import AppIcon from './AppIcon.vue'
 import FloatingMenu from './FloatingMenu.vue'
 
+const access = useWorkspaceAccessStore()
 const title = defineModel<string>({ required: true })
 defineProps<{ category: Category; error: string }>()
 const emit = defineEmits<{ reuse: [entry: TaskMemoryEntry] }>()
@@ -91,6 +93,7 @@ defineExpose({ focus: () => field.value?.focus() })
     <div class="title-label">
       <label for="task-title">Task title</label>
       <button
+        :disabled="!access.canEdit"
         v-if="memory.entries.length || memoryNotice || managing"
         type="button"
         class="memory-toggle"
@@ -105,6 +108,7 @@ defineExpose({ focus: () => field.value?.focus() })
       <div class="title-field">
         <AppIcon :name="category" />
         <input
+          :disabled="!access.canEdit"
           id="task-title"
           ref="field"
           v-model="title"
@@ -159,6 +163,7 @@ defineExpose({ focus: () => field.value?.focus() })
             <div v-for="entry in allEntries" :key="entry.title" class="memory-row">
               <AppIcon :name="entry.category" /><span class="entry-title">{{ entry.title }}</span>
               <button
+                :disabled="!access.canEdit"
                 type="button"
                 class="icon-button"
                 :aria-label="`Forget ${entry.title}`"

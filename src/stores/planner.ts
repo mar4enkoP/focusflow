@@ -1,3 +1,4 @@
+import { useWorkspaceAccessStore } from './workspaceAccess'
 import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 import { useTasksStore } from './tasks'
@@ -20,6 +21,7 @@ export interface SessionPlan {
 }
 const copy = <T>(value: T): T => JSON.parse(JSON.stringify(value))
 export const usePlannerStore = defineStore('planner', () => {
+  const access = useWorkspaceAccessStore()
   const tasks = useTasksStore(),
     history = useFocusHistoryStore()
   const settings = ref<PlanSettings>({
@@ -31,6 +33,10 @@ export const usePlannerStore = defineStore('planner', () => {
   const accepted = ref<SessionPlan>()
   const proposal = ref<SessionPlan>()
   const error = ref('')
+  function updateSettings(value: PlanSettings) {
+    if (!access.canEdit) return
+    settings.value = copy(value)
+  }
   function actual(id: string) {
     return (
       history.observations.filter((o) => o.taskId === id).reduce((sum, o) => sum + o.actualMs, 0) +
@@ -68,6 +74,7 @@ export const usePlannerStore = defineStore('planner', () => {
       )?.taskId,
   )
   function generate(reschedule = false, now = Date.now()) {
+    if (!access.canMutate) return false
     error.value = ''
     if (!validSettings(settings.value)) {
       error.value = 'Use 1–1,440 minutes, breaks of 0–60 minutes, and a frequency of 1–20 tasks.'
@@ -129,6 +136,7 @@ export const usePlannerStore = defineStore('planner', () => {
     }
   }
   function accept(now = Date.now()) {
+    if (!access.canMutate) return false
     const plan = proposal.value
     if (!plan) return false
     if (
@@ -149,10 +157,12 @@ export const usePlannerStore = defineStore('planner', () => {
     return true
   }
   function reject() {
+    if (!access.canMutate) return false
     proposal.value = undefined
     error.value = ''
   }
   function begin(id: string, now = Date.now()) {
+    if (!access.canMutate) return false
     const plan = accepted.value
     if (plan && plan.startedAt === undefined && plan.date !== localDay(now)) {
       error.value =
@@ -173,6 +183,7 @@ export const usePlannerStore = defineStore('planner', () => {
   watch(
     () => tasks.tasks.map((t) => `${t.id}:${t.completed}`).join('|'),
     () => {
+      if (!access.canEdit) return
       if (!accepted.value) return
       for (const task of tasks.tasks)
         if (
@@ -188,6 +199,7 @@ export const usePlannerStore = defineStore('planner', () => {
     return { settings: settings.value, accepted: accepted.value }
   }
   function restore(value: unknown) {
+    if (!access.canMutate) return false
     if (!value || typeof value !== 'object') return false
     const data = value as ReturnType<typeof snapshot>
     if (!validSettings(data.settings)) return false
@@ -207,6 +219,7 @@ export const usePlannerStore = defineStore('planner', () => {
     return true
   }
   return {
+    updateSettings,
     settings,
     accepted,
     proposal,

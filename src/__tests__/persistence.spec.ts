@@ -1,5 +1,5 @@
 import { beforeEach, afterEach, expect, it, vi } from 'vitest'
-import { createPinia } from 'pinia'
+import { createOwnedPinia as createPinia } from './workspaceTestUtils'
 import { installPersistence, STORAGE_KEY } from '../persistence'
 import { useTasksStore } from '../stores/tasks'
 import { useTimerStore } from '../stores/timer'
