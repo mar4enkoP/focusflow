@@ -1,9 +1,10 @@
 ﻿<script setup lang="ts">
 import { computed, onBeforeUnmount, watch, useId, ref } from 'vue'
 
-const props = withDefaults(defineProps<{ mode?: 'focus' | 'list' | 'form' | 'workspace' }>(), {
-  mode: 'focus',
-})
+const props = withDefaults(
+  defineProps<{ mode?: 'focus' | 'list' | 'form' | 'workspace'; running?: boolean }>(),
+  { mode: 'focus', running: false },
+)
 const gradientId = useId()
 const interiorId = useId()
 const focusGradientId = useId()
@@ -12,27 +13,32 @@ const maskId = useId()
 const blurId = useId()
 const bend = ref(props.mode === 'focus' || props.mode === 'workspace' ? 0 : 1)
 const flat = ref(props.mode === 'workspace' ? 1 : 0)
+const lift = ref(props.mode === 'focus' && props.running ? 1 : 0)
 let frame: number | undefined
 
 watch(
-  () => props.mode,
-  (mode) => {
+  () => [props.mode, props.running] as const,
+  ([mode, running]) => {
     if (frame !== undefined) cancelAnimationFrame(frame)
     const target = mode === 'focus' || mode === 'workspace' ? 0 : 1
     const flatTarget = mode === 'workspace' ? 1 : 0
+    const liftTarget = mode === 'focus' && running ? 1 : 0
     if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
       bend.value = target
       flat.value = flatTarget
+      lift.value = liftTarget
       return
     }
     const from = bend.value
     const flatFrom = flat.value
+    const liftFrom = lift.value
     const start = performance.now()
     const animate = (now: number) => {
       const elapsed = Math.min((now - start) / 900, 1)
       const eased = 1 - Math.pow(1 - elapsed, 3)
       bend.value = from + (target - from) * eased
       flat.value = flatFrom + (flatTarget - flatFrom) * eased
+      lift.value = liftFrom + (liftTarget - liftFrom) * eased
       if (elapsed < 1) frame = requestAnimationFrame(animate)
     }
     frame = requestAnimationFrame(animate)
@@ -45,9 +51,10 @@ onBeforeUnmount(() => {
 // The open horizon closes fully at the top when it becomes a circle.
 const curve = computed(() => {
   const amount = bend.value
-  const radiusX = 500 - 80 * amount
-  const radiusY = 800 - 380 * amount
-  const centerY = 500 * amount
+  // Deepen the bowl around its fixed bottom: centerY + radiusY stays unchanged.
+  const radiusX = 500 - 80 * amount + 20 * lift.value
+  const radiusY = 800 - 380 * amount + 350 * lift.value
+  const centerY = 500 * amount - 350 * lift.value
   const sweep = 1.35 + (Math.PI - 1.35) * amount
   const path = Array.from({ length: 121 }, (_, index) => {
     const angle = -sweep + (2 * sweep * index) / 120
@@ -61,7 +68,7 @@ const curve = computed(() => {
 </script>
 
 <template>
-  <div class="focus-backdrop" :data-mode="mode" aria-hidden="true">
+  <div class="focus-backdrop" :data-mode="mode" :data-running="running" aria-hidden="true">
     <svg class="horizon" viewBox="0 0 1000 1000" preserveAspectRatio="none">
       <defs>
         <linearGradient :id="gradientId" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -96,8 +103,8 @@ const curve = computed(() => {
         </clipPath>
         <linearGradient :id="fadeId" x1="0" y1="0" x2="0" y2="1000" gradientUnits="userSpaceOnUse">
           <stop offset="20%" stop-color="white" stop-opacity="0" />
-          <stop offset="45%" stop-color="white" stop-opacity="0.15" />
-          <stop offset="75%" stop-color="white" />
+          <stop offset="45%" stop-color="white" :stop-opacity="0.15 + 0.15 * lift" />
+          <stop :offset="`${75 - 8 * lift}%`" stop-color="white" />
         </linearGradient>
         <mask :id="maskId" maskUnits="userSpaceOnUse" x="-200" y="-500" width="1400" height="2000">
           <rect x="-200" y="-500" width="1400" height="2000" :fill="`url(#${fadeId})`" />
@@ -110,7 +117,7 @@ const curve = computed(() => {
           width="2000"
           height="3000"
         >
-          <feGaussianBlur stdDeviation="20 110" />
+          <feGaussianBlur :stdDeviation="`20 ${110 + 40 * lift}`" />
         </filter>
         <filter
           :id="`${blurId}-band`"
@@ -120,7 +127,7 @@ const curve = computed(() => {
           width="2000"
           height="3000"
         >
-          <feGaussianBlur stdDeviation="12 65" />
+          <feGaussianBlur :stdDeviation="`12 ${65 + 15 * lift}`" />
         </filter>
         <filter
           :id="`${blurId}-core`"
@@ -150,18 +157,21 @@ const curve = computed(() => {
         <g :clip-path="`url(#${interiorId})`">
           <path
             class="focus-halo"
+            :style="{ strokeWidth: `${180 + 140 * lift}px`, opacity: 0.28 + 0.14 * lift }"
             :d="curve"
             :filter="`url(#${blurId}-halo)`"
             vector-effect="non-scaling-stroke"
           />
           <path
             class="focus-band"
+            :style="{ strokeWidth: `${84 + 80 * lift}px`, opacity: 0.7 + 0.2 * lift }"
             :d="curve"
             :filter="`url(#${blurId}-band)`"
             vector-effect="non-scaling-stroke"
           />
           <path
             class="focus-core"
+            :style="{ strokeWidth: `${28 + 24 * lift}px` }"
             :d="curve"
             :filter="`url(#${blurId}-core)`"
             vector-effect="non-scaling-stroke"
@@ -237,10 +247,17 @@ const curve = computed(() => {
   filter: blur(1.5px);
 }
 
+.focus-backdrop[data-mode='focus'][data-running='true'] .horizon {
+  width: min(1960px, 100vw);
+}
+
 @media (max-width: 600px) {
   .horizon {
     width: 140vw;
     height: 230px;
+  }
+  .focus-backdrop[data-mode='focus'][data-running='true'] .horizon {
+    width: 148vw;
   }
 }
 @media (max-height: 600px) {
