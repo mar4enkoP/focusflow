@@ -63,6 +63,50 @@ function workspace(t: ReturnType<typeof tab>) {
     proposal: t.planner.proposal,
   })
 }
+
+it('only persists rollback recovery after the new owner finishes hydration', async () => {
+  let now = 1_700_000_000_000
+  vi.spyOn(Date, 'now').mockImplementation(() => now)
+  const locks = lockService()
+  const a = tab(locks)
+  const b = tab(locks)
+  await flushPromises()
+  a.tasks.save(input)
+  a.timer.select(a.tasks.tasks[0]!.id)
+  a.timer.start()
+  const remaining = a.timer.remaining
+  now -= 60_000
+  vi.mocked(localStorage.setItem).mockClear()
+  b.timer.sync()
+  expect(localStorage.setItem).not.toHaveBeenCalled()
+  const write = localStorage.setItem
+  const writeAccess: Array<{ oldOwner: boolean; newOwner: boolean; hydrating: boolean }> = []
+  vi.mocked(localStorage.setItem).mockImplementation((key, value) => {
+    writeAccess.push({
+      oldOwner: a.access.canEdit,
+      newOwner: b.access.canEdit,
+      hydrating: b.access.hydrating,
+    })
+    data.set(key, value)
+  })
+  await a.stop()
+  await flushPromises()
+  expect(write).toHaveBeenCalledTimes(1)
+  expect(writeAccess).toEqual([{ oldOwner: false, newOwner: true, hydrating: false }])
+  expect(b.timer.state).toBe('paused')
+  expect(b.timer.remaining).toBe(remaining)
+  expect(b.tasks.tasks).toEqual(a.tasks.tasks)
+  const saved = data.get(STORAGE_KEY)
+  const snapshot = JSON.parse(saved!)
+  expect(snapshot.timer).toMatchObject({ state: 'paused', remaining })
+  expect(snapshot.timer.deadline).toBeUndefined()
+  expect(snapshot.focus.sessions).toHaveLength(1)
+  expect(snapshot.focus.sessions[0].reliable).toBe(false)
+  expect(snapshot.focus.sessions[0].since).toBeUndefined()
+  a.timer.sync()
+  expect(data.get(STORAGE_KEY)).toBe(saved)
+  expect(write).toHaveBeenCalledTimes(1)
+})
 function tryMutations(t: ReturnType<typeof tab>) {
   const id = t.tasks.tasks[0]?.id ?? 'missing'
   t.tasks.save(input)

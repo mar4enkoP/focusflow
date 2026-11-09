@@ -10,6 +10,16 @@ import {
   type Observation,
 } from '@/estimation'
 
+// Compare all stored fields, including nested intervals, independently of object key order.
+// Unknown fields are included so differing data is never silently treated as a duplicate.
+function recordSignature(value: FocusSession | Observation) {
+  return JSON.stringify(value, (_key: string, item: unknown) =>
+    item && typeof item === 'object' && !Array.isArray(item)
+      ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b)))
+      : item,
+  )
+}
+
 export const useFocusHistoryStore = defineStore('focusHistory', () => {
   const access = useWorkspaceAccessStore()
   const sessions = ref<FocusSession[]>([])
@@ -19,16 +29,18 @@ export const useFocusHistoryStore = defineStore('focusHistory', () => {
     const session = sessions.value.find((s) => s.taskId === id)
     if (!session || session.since === undefined) return
     const elapsed = now - session.since
+    const last = session.intervals?.[session.intervals.length - 1]
+    const start = Math.max(session.since, last?.end ?? session.since)
+    const measured = Math.max(0, now - start)
     // Background suspension, sleep, clock changes and long gaps are not proof of work.
-    if (elapsed < 0 || elapsed > 5 * 60000) session.reliable = false
-    if (elapsed > 0 && session.intervals) {
-      const last = session.intervals[session.intervals.length - 1]
-      if (last?.end === session.since) last.end = now
-      else if (!last || last.end <= session.since)
-        session.intervals.push({ start: session.since, end: now })
+    if (elapsed < 0 || elapsed > 5 * 60000 || start > session.since) session.reliable = false
+    if (measured > 0 && session.intervals) {
+      if (last?.end === start) last.end = now
+      else session.intervals.push({ start, end: now })
     }
-    session.actualMs = Math.min(Number.MAX_SAFE_INTEGER, session.actualMs + Math.max(0, elapsed))
-    session.since = now
+    session.actualMs = Math.min(Number.MAX_SAFE_INTEGER, session.actualMs + measured)
+    // Keep the high-water mark when a caller ticks again before the clock catches up.
+    session.since = Math.max(session.since, now)
     if (session.actualMs > MAX_RELIABLE_FOCUS_MS) session.reliable = false
   }
   function begin(task: Task, reliable = true) {
@@ -48,20 +60,28 @@ export const useFocusHistoryStore = defineStore('focusHistory', () => {
       sessions.value.push(session)
       session = sessions.value[sessions.value.length - 1]!
     }
-    session.since ??= Date.now()
+    const now = Date.now()
+    if (now < (session.intervals?.[session.intervals.length - 1]?.end ?? 0))
+      session.reliable = false
+    session.since ??= now
   }
-  function pause(id?: string) {
+  function pause(id?: string, now = Date.now()) {
     if (!access.canMutate) return false
-    tick(id)
+    tick(id, now)
     const session = sessions.value.find((s) => s.taskId === id)
-    if (session) delete session.since
+    if (session) {
+      if (now < (session.intervals?.[session.intervals.length - 1]?.end ?? 0))
+        session.reliable = false
+      delete session.since
+    }
   }
   function finish(task: Task) {
     if (!access.canMutate) return false
-    pause(task.id)
+    const now = Date.now()
+    pause(task.id, now)
     const session = sessions.value.find((s) => s.taskId === task.id)
     if (session && !observations.value.some((o) => o.sessionId === session.sessionId)) {
-      observations.value.push({ ...session, completedAt: Date.now() })
+      observations.value.push({ ...session, completedAt: now })
     }
     discard(task.id)
   }
@@ -74,16 +94,26 @@ export const useFocusHistoryStore = defineStore('focusHistory', () => {
     if (!value || typeof value !== 'object') return false
     const data = value as { sessions?: unknown; observations?: unknown }
     if (!Array.isArray(data.sessions) || !Array.isArray(data.observations)) return false
-    const seen = new Set<string>()
+    const seen = new Map<string, { kind: 'session' | 'observation'; signature: string }>()
     let valid = true
+    function unique(record: FocusSession | Observation, kind: 'session' | 'observation') {
+      const signature = recordSignature(record)
+      const previous = seen.get(record.sessionId)
+      if (previous) {
+        // A conflict makes persistence preserve the original raw snapshot. Only exact
+        // duplicates of the same record kind can be dropped without losing information.
+        if (previous.kind !== kind || previous.signature !== signature) valid = false
+        return false
+      }
+      seen.set(record.sessionId, { kind, signature })
+      return true
+    }
     observations.value = data.observations.filter((o): o is Observation => {
       if (!validObservation(o)) {
         valid = false
         return false
       }
-      if (seen.has(o.sessionId)) return false
-      seen.add(o.sessionId)
-      return true
+      return unique(o, 'observation')
     })
     const taskIds = new Set<string>()
     sessions.value = data.sessions.filter((s): s is FocusSession => {
@@ -91,21 +121,19 @@ export const useFocusHistoryStore = defineStore('focusHistory', () => {
         valid = false
         return false
       }
-      if (
-        seen.has(s.sessionId) ||
-        taskIds.has(s.taskId) ||
-        !tasks.some((t) => t.id === s.taskId && !t.completed)
-      )
+      if (!unique(s, 'session')) return false
+      if (taskIds.has(s.taskId)) {
+        valid = false
         return false
-      seen.add(s.sessionId)
+      }
       taskIds.add(s.taskId)
-      return true
+      return tasks.some((t) => t.id === s.taskId && !t.completed)
     })
     for (const session of sessions.value) {
       if (session.since !== undefined) {
         session.reliable = false
-        if (session.taskId === activeId) tick(session.taskId)
-        else delete session.since
+        // The timer reconciles the active session after inspecting its original timestamp.
+        if (session.taskId !== activeId) delete session.since
       }
     }
     return valid
