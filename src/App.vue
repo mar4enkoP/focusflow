@@ -81,7 +81,7 @@ function save(input: TaskInput) {
 </script>
 <template>
   <div class="app-shell" :class="{ 'is-focus': view === 'focus', 'is-creating': view === 'form' }">
-    <FocusBackdrop :mode="workspaceOpen ? 'workspace' : view" />
+    <FocusBackdrop :mode="workspaceOpen ? 'workspace' : view" :running="timer.isFocusing" />
     <header>
       <a
         class="brand"
