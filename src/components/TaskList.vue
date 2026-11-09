@@ -1,7 +1,9 @@
 ﻿<script setup lang="ts">
+import { useWorkspaceAccessStore } from '@/stores/workspaceAccess'
 import { nextTick, ref } from 'vue'
 import { useTasksStore, type Task } from '@/stores/tasks'
 import AppIcon from './AppIcon.vue'
+const access = useWorkspaceAccessStore()
 const store = useTasksStore()
 const dragging = ref<string>()
 const target = ref<{ id: string; position: 'before' | 'after' }>()
@@ -12,6 +14,7 @@ function endDrag() {
   target.value = undefined
 }
 function dragOver(event: DragEvent, id: string) {
+  if (!access.canEdit) return
   if (!dragging.value) return
   event.preventDefault()
   if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
@@ -34,10 +37,12 @@ async function announce(id: string, restoreFocus = false) {
   }
 }
 function move(id: string, direction: -1 | 1) {
+  if (!access.canEdit) return
   store.move(id, direction)
   void announce(id, true)
 }
 function drop(event: DragEvent, id: string) {
+  if (!access.canEdit) return
   if (!dragging.value) return
   dragOver(event, id)
   const movedId = dragging.value
@@ -47,6 +52,7 @@ function drop(event: DragEvent, id: string) {
   endDrag()
 }
 function drag(event: DragEvent, id: string) {
+  if (!access.canEdit) return
   dragging.value = id
   if (event.dataTransfer) {
     event.dataTransfer.effectAllowed = 'move'
@@ -82,8 +88,9 @@ defineEmits<{ edit: [task: Task]; select: [id: string] }>()
       @dragend="endDrag"
     >
       <button
+        :disabled="!access.canEdit"
         class="drag-handle"
-        draggable="true"
+        :draggable="access.canEdit"
         @dragstart="drag($event, task.id)"
         :aria-label="`Reorder ${task.title}; use arrow keys`"
         title="Drag to reorder; Arrow keys to move"
@@ -102,6 +109,7 @@ defineEmits<{ edit: [task: Task]; select: [id: string] }>()
         </svg>
       </button>
       <input
+        :disabled="!access.canEdit"
         type="checkbox"
         :checked="task.completed"
         :aria-label="`Complete ${task.title}`"
@@ -111,7 +119,7 @@ defineEmits<{ edit: [task: Task]; select: [id: string] }>()
       <div class="task-info">
         <button
           class="select-task"
-          :disabled="task.completed"
+          :disabled="!access.canEdit || task.completed"
           :aria-label="`Focus on ${task.title}`"
           @click="$emit('select', task.id)"
         >
@@ -125,6 +133,7 @@ defineEmits<{ edit: [task: Task]; select: [id: string] }>()
       </div>
       <div class="row-actions">
         <button
+          :disabled="!access.canEdit"
           class="icon-button"
           :aria-label="`Edit ${task.title}`"
           title="Edit task"
@@ -133,6 +142,7 @@ defineEmits<{ edit: [task: Task]; select: [id: string] }>()
           <AppIcon name="edit" />
         </button>
         <button
+          :disabled="!access.canEdit"
           class="icon-button delete"
           :aria-label="`Delete ${task.title}`"
           title="Delete task"

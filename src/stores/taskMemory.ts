@@ -1,3 +1,4 @@
+import { useWorkspaceAccessStore } from './workspaceAccess'
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import type { TaskInput, Priority } from './tasks'
@@ -11,8 +12,10 @@ export interface TaskMemoryEntry extends TaskInput {
 export const normalizeTitle = (title: string) => title.trim().replace(/\s+/g, ' ').toLowerCase()
 
 export const useTaskMemoryStore = defineStore('taskMemory', () => {
+  const access = useWorkspaceAccessStore()
   const entries = ref<TaskMemoryEntry[]>([])
   function remember(input: TaskInput, timestamp = Date.now()) {
+    if (!access.canMutate) return false
     const key = normalizeTitle(input.title)
     if (!key) return
     const previous = entries.value.find((entry) => normalizeTitle(entry.title) === key)
@@ -27,6 +30,7 @@ export const useTaskMemoryStore = defineStore('taskMemory', () => {
     entries.value = [...entries.value.filter((item) => normalizeTitle(item.title) !== key), entry]
   }
   function forget(title: string) {
+    if (!access.canMutate) return false
     if (!entries.value.some((entry) => normalizeTitle(entry.title) === normalizeTitle(title)))
       return
     entries.value = entries.value.filter(

@@ -1,4 +1,5 @@
-import { ref, watch } from 'vue'
+import { effectScope, onScopeDispose, ref, watch } from 'vue'
+import { useWorkspaceAccessStore } from './stores/workspaceAccess'
 import type { Pinia } from 'pinia'
 import { useTasksStore, validateTask, type Task } from './stores/tasks'
 import { useTimerStore } from './stores/timer'
@@ -13,7 +14,7 @@ export const STORAGE_KEY = 'focusflow'
 export const MEMORY_STORAGE_KEY = 'focusflow-memory'
 export const memoryNotice = ref('')
 export const persistenceNotice = ref('Saved on this device')
-const installed = new WeakSet<Pinia>()
+const installed = new WeakMap<Pinia, () => void>()
 type Timer = ReturnType<ReturnType<typeof useTimerStore>['snapshot']>
 interface Snapshot {
   version: 1 | 2
@@ -44,15 +45,92 @@ function validTimer(value: Timer) {
   )
 }
 export function installPersistence(pinia: Pinia) {
-  if (installed.has(pinia)) return
-  installed.add(pinia)
+  const existing = installed.get(pinia)
+  if (existing) return existing
+  const access = useWorkspaceAccessStore(pinia)
+  let subscriptions: ReturnType<typeof effectScope> | undefined
+  const stop = watch(
+    () => access.ownsLock,
+    (owned) => {
+      subscriptions?.stop()
+      subscriptions = undefined
+      access.hydrated = false
+      if (!owned) return
+      access.hydrating = true
+      try {
+        // Read every key before touching stores. Each key retains its own damage policy.
+        const reads = new Map<string, { raw: string | null; failed: boolean }>()
+        for (const key of [STORAGE_KEY, MEMORY_STORAGE_KEY, PLAN_STORAGE_KEY]) {
+          try {
+            reads.set(key, { raw: localStorage.getItem(key), failed: false })
+          } catch {
+            reads.set(key, { raw: null, failed: true })
+          }
+        }
+        if ([...reads.values()].some((result) => result.failed)) {
+          throw new Error('Cannot safely reload the complete workspace')
+        }
+        const read = (key: string) => {
+          const result = reads.get(key)!
+          if (result.failed) throw new Error('Storage unavailable')
+          return result.raw
+        }
+        const tasks = useTasksStore(pinia)
+        const history = useFocusHistoryStore(pinia)
+        const timer = useTimerStore(pinia)
+        const planner = usePlannerStore(pinia)
+        tasks.tasks = []
+        history.sessions = []
+        history.observations = []
+        useTaskMemoryStore(pinia).entries = []
+        timer.restore({
+          state: 'ready',
+          selectedId: undefined,
+          remaining: 0,
+          budget: 0,
+          deadline: undefined,
+          saved: [],
+        })
+        planner.proposal = undefined
+        planner.error = ''
+        planner.restore({
+          settings: { minutes: 60, breakMinutes: 5, breakEvery: 2, selectedIds: [] },
+        })
+        persistenceNotice.value = 'Saved on this device'
+        subscriptions = effectScope(true)
+        const seedMemory = subscriptions.run(() => installSnapshot(pinia, read))
+        access.hydrating = false
+        access.hydrated = true
+        access.generation += 1
+        seedMemory?.()
+      } catch {
+        subscriptions?.stop()
+        access.transition('error', 'Could not restore the workspace. Saved data is preserved.')
+      } finally {
+        access.hydrating = false
+      }
+    },
+    { immediate: true, flush: 'sync' },
+  )
+  const dispose = () => {
+    stop()
+    subscriptions?.stop()
+    access.hydrated = false
+    installed.delete(pinia)
+  }
+  installed.set(pinia, dispose)
+  return dispose
+}
+
+function installSnapshot(pinia: Pinia, read: (key: string) => string | null) {
+  const access = useWorkspaceAccessStore(pinia)
   const tasks = useTasksStore(pinia)
   const timer = useTimerStore(pinia)
   const history = useFocusHistoryStore(pinia)
   let writable = true
   let lastWritten: string | null = null
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = read(STORAGE_KEY)
     lastWritten = raw
     if (raw !== null) {
       const data: Snapshot = JSON.parse(raw)
@@ -107,7 +185,7 @@ export function installPersistence(pinia: Pinia) {
       'Saved data unavailable. Changes stay in this visit; existing data is preserved.'
   }
   const save = () => {
-    if (!writable) return
+    if (!writable || !access.canEdit) return
     try {
       const serialized = JSON.stringify({
         version: 2,
@@ -123,10 +201,12 @@ export function installPersistence(pinia: Pinia) {
       persistenceNotice.value = 'Could not save on this device. Changes stay in this visit.'
     }
   }
-  tasks.$subscribe(save, { detached: true, flush: 'sync' })
-  timer.$onAction(({ name, after }) => {
-    if (name !== 'sync' && name !== 'snapshot') after(save)
-  }, true)
+  onScopeDispose(tasks.$subscribe(save, { detached: true, flush: 'sync' }))
+  onScopeDispose(
+    timer.$onAction(({ name, after }) => {
+      if (name !== 'sync' && name !== 'snapshot') after(save)
+    }, true),
+  )
   watch(
     () => timer.state,
     (state) => {
@@ -134,17 +214,19 @@ export function installPersistence(pinia: Pinia) {
     },
     { flush: 'sync' },
   )
-  installMemoryPersistence(pinia, tasks.tasks)
-  installPlanPersistence(pinia)
+  const seedMemory = installMemoryPersistence(pinia, tasks.tasks, read)
+  installPlanPersistence(pinia, read)
+  return seedMemory
 }
 
-function installPlanPersistence(pinia: Pinia) {
+function installPlanPersistence(pinia: Pinia, read: (key: string) => string | null) {
+  const access = useWorkspaceAccessStore(pinia)
   const planner = usePlannerStore(pinia)
   let writable = true
   let last: string | null = null
   planNotice.value = ''
   try {
-    last = localStorage.getItem(PLAN_STORAGE_KEY)
+    last = read(PLAN_STORAGE_KEY)
     if (last !== null) {
       const data = JSON.parse(last)
       if (data?.version !== 1 || !planner.restore(data)) throw new Error('Invalid plan')
@@ -158,7 +240,7 @@ function installPlanPersistence(pinia: Pinia) {
   watch(
     () => planner.snapshot(),
     () => {
-      if (!writable) return
+      if (!writable || !access.canEdit) return
       try {
         if (validSettings(planner.settings))
           validPreferences = JSON.parse(JSON.stringify(planner.settings))
@@ -181,13 +263,18 @@ function installPlanPersistence(pinia: Pinia) {
 
 // A separate versioned key keeps damaged/unsupported memory independent of tasks
 // and timers, and avoids rewriting the task snapshot while managing suggestions.
-function installMemoryPersistence(pinia: Pinia, existingTasks: Task[]) {
+function installMemoryPersistence(
+  pinia: Pinia,
+  existingTasks: Task[],
+  read: (key: string) => string | null,
+) {
+  const access = useWorkspaceAccessStore(pinia)
   const memory = useTaskMemoryStore(pinia)
   let writable = true
   let seeded = false
   memoryNotice.value = ''
   try {
-    const raw = localStorage.getItem(MEMORY_STORAGE_KEY)
+    const raw = read(MEMORY_STORAGE_KEY)
     if (raw === null) {
       // Existing tasks seed memory once; an explicitly saved empty memory stays empty.
       for (const task of existingTasks) memory.remember(task, 0)
@@ -230,7 +317,7 @@ function installMemoryPersistence(pinia: Pinia, existingTasks: Task[]) {
     memoryNotice.value =
       'Saved memory is damaged or unavailable. Changes to suggestions stay in this visit; saved data is preserved.'
   const saveMemory = () => {
-    if (!writable) return
+    if (!writable || !access.canEdit) return
     try {
       localStorage.setItem(
         MEMORY_STORAGE_KEY,
@@ -241,6 +328,8 @@ function installMemoryPersistence(pinia: Pinia, existingTasks: Task[]) {
       memoryNotice.value = 'Could not save task memory. Suggestions stay in this visit.'
     }
   }
-  memory.$subscribe(saveMemory, { detached: true, flush: 'sync' })
-  if (seeded) saveMemory()
+  onScopeDispose(memory.$subscribe(saveMemory, { detached: true, flush: 'sync' }))
+  return () => {
+    if (seeded) saveMemory()
+  }
 }

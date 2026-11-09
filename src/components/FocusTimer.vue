@@ -1,7 +1,9 @@
 ﻿<script setup lang="ts">
+import { useWorkspaceAccessStore } from '@/stores/workspaceAccess'
 import { computed } from 'vue'
 import { useTimerStore } from '@/stores/timer'
 import AppIcon from '@/components/AppIcon.vue'
+const access = useWorkspaceAccessStore()
 const timer = useTimerStore()
 const display = computed(() => {
   const seconds = Math.ceil(timer.remaining / 1000)
@@ -16,17 +18,19 @@ const display = computed(() => {
     <div class="countdown" role="timer" aria-label="Time remaining">{{ display }}</div>
     <p class="status" role="status">
       {{
-        !timer.task
-          ? 'Choose an unfinished task to begin'
-          : timer.state === 'expired'
-            ? timer.isFocusing
-              ? 'Time is up · Focus time is still being recorded.'
-              : 'Time is up. Continue focus, add time or complete.'
-            : timer.state === 'running'
-              ? 'Focus'
-              : timer.state === 'paused'
-                ? 'Paused · Take your time'
-                : 'Ready when you are'
+        !access.canEdit
+          ? 'Read-only · Timer snapshot'
+          : !timer.task
+            ? 'Choose an unfinished task to begin'
+            : timer.state === 'expired'
+              ? timer.isFocusing
+                ? 'Time is up · Focus time is still being recorded.'
+                : 'Time is up. Continue focus, add time or complete.'
+              : timer.state === 'running'
+                ? 'Focus'
+                : timer.state === 'paused'
+                  ? 'Paused · Take your time'
+                  : 'Ready when you are'
       }}
     </p>
     <p v-if="timer.task" class="planned">Planned · {{ timer.task.duration }} min</p>
@@ -34,7 +38,7 @@ const display = computed(() => {
       <button
         aria-label="Reset timer"
         title="Reset timer"
-        :disabled="!timer.task"
+        :disabled="!access.canEdit || !timer.task"
         @click="timer.reset"
       >
         <AppIcon name="reset" />
@@ -42,7 +46,7 @@ const display = computed(() => {
       <button
         class="play"
         :aria-label="timer.isFocusing ? 'Pause timer' : 'Start or resume timer'"
-        :disabled="!timer.task"
+        :disabled="!access.canEdit || !timer.task"
         @click="timer.isFocusing ? timer.pause() : timer.continueFocus()"
       >
         <AppIcon :name="timer.isFocusing ? 'pause' : 'play'" />
@@ -50,13 +54,15 @@ const display = computed(() => {
       <button
         aria-label="Complete task and select next"
         title="Complete task and select next"
-        :disabled="!timer.task"
+        :disabled="!access.canEdit || !timer.task"
         @click="timer.complete"
       >
         <AppIcon name="next" />
       </button>
     </div>
-    <button class="add-time" :disabled="!timer.task" @click="timer.addTime">+5 min</button>
+    <button class="add-time" :disabled="!access.canEdit || !timer.task" @click="timer.addTime">
+      +5 min
+    </button>
   </section>
 </template>
 <style scoped lang="scss">

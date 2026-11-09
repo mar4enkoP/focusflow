@@ -1,5 +1,6 @@
 ﻿import { beforeEach, describe, expect, it } from 'vitest'
-import { createPinia, setActivePinia } from 'pinia'
+import { setActivePinia } from 'pinia'
+import { createOwnedPinia as createPinia } from './workspaceTestUtils'
 import { useTasksStore, type TaskInput } from '../stores/tasks'
 const input: TaskInput = { title: 'Write proposal', duration: 25, category: 'Work' }
 describe('task store', () => {

@@ -1,4 +1,5 @@
-import { expect, it, vi } from 'vitest'
+import { lockService } from './workspaceTestUtils'
+import { expect, it } from 'vitest'
 import { createPinia } from 'pinia'
 import { flushPromises } from '@vue/test-utils'
 import { useWorkspaceAccessStore } from '../stores/workspaceAccess'
@@ -7,43 +8,6 @@ import {
   WORKSPACE_LOCK_NAME,
   type WorkspaceLockManager,
 } from '../workspaceOwnership'
-
-// A shared, queued exclusive lock service; each client below has its own Pinia.
-function lockService() {
-  const queue: Array<() => void> = []
-  let held = false
-  const pump = () => {
-    if (!held) queue.shift()?.()
-  }
-  const request = vi.fn<WorkspaceLockManager['request']>((name, options, callback) => {
-    return new Promise<void>((resolve, reject) => {
-      const abort = () => {
-        const index = queue.indexOf(grant)
-        if (index >= 0) queue.splice(index, 1)
-        reject(new DOMException('Cancelled', 'AbortError'))
-      }
-      const grant = () => {
-        options.signal.removeEventListener('abort', abort)
-        held = true
-        void Promise.resolve()
-          .then(() => callback({ name, mode: options.mode }))
-          .then(resolve, reject)
-          .finally(() => {
-            held = false
-            pump()
-          })
-      }
-      if (options.signal.aborted) {
-        abort()
-        return
-      }
-      options.signal.addEventListener('abort', abort, { once: true })
-      queue.push(grant)
-      queueMicrotask(pump)
-    })
-  })
-  return { request }
-}
 
 function client(locks: WorkspaceLockManager | undefined) {
   const access = useWorkspaceAccessStore(createPinia())

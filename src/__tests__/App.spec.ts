@@ -1,6 +1,6 @@
 ﻿import { nextTick } from 'vue'
 import { afterEach, describe, it, expect, vi } from 'vitest'
-import { createPinia } from 'pinia'
+import { createOwnedPinia as createPinia } from './workspaceTestUtils'
 import { mount } from '@vue/test-utils'
 import App from '../App.vue'
 import { useTimerStore } from '../stores/timer'

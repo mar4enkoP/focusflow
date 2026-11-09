@@ -71,7 +71,7 @@ export function createWorkspaceOwnership(
     if (!stopped) {
       stopped = true
       // Revoke local ownership before allowing another tab to acquire the lock.
-      access.transition(status)
+      if (status === 'disposed' || access.status !== 'error') access.transition(status)
       controller.abort()
       // Aborting only cancels pending requests; a held lock needs its callback resolved.
       release?.()

@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { computed, nextTick, ref, onMounted, onUnmounted } from 'vue'
+import { computed, nextTick, ref, watch, onMounted, onUnmounted } from 'vue'
 import { useTasksStore, type Task, type TaskInput } from '@/stores/tasks'
 import AppIcon from '@/components/AppIcon.vue'
 import TaskForm from '@/components/TaskForm.vue'
@@ -7,8 +7,20 @@ import TaskList from '@/components/TaskList.vue'
 import FocusTimer from '@/components/FocusTimer.vue'
 import FocusBackdrop from '@/components/FocusBackdrop.vue'
 import WorkspaceTools from '@/components/WorkspaceTools.vue'
+import { useWorkspaceAccessStore } from '@/stores/workspaceAccess'
 import { persistenceNotice } from './persistence'
 import { useTimerStore } from '@/stores/timer'
+const access = useWorkspaceAccessStore()
+const accessNotice = computed(() => {
+  if (access.canEdit) return ''
+  if (access.status === 'unsupported')
+    return 'Read-only — safe editing requires a browser with Web Locks support and a secure connection.'
+  if (access.status === 'error') return 'Read-only — ' + access.error
+  if (access.ownsLock) return 'Loading the latest workspace…'
+  if (access.status === 'waiting')
+    return 'Read-only — waiting for workspace ownership. Close the other FocusFlow tab to edit here.'
+  return 'Read-only — workspace editing is unavailable.'
+})
 const timer = useTimerStore()
 const workspaceOpen = ref(false)
 let pulse: ReturnType<typeof setInterval> | undefined
@@ -21,26 +33,37 @@ onUnmounted(() => {
   document.removeEventListener('visibilitychange', timer.sync)
 })
 function focus(id: string) {
+  if (!access.canEdit) return
   timer.select(id)
   view.value = 'focus'
 }
 const store = useTasksStore()
-const view = ref<'list' | 'form' | 'focus'>(store.tasks.length ? 'list' : 'form')
+const view = ref<'list' | 'form' | 'focus'>(access.canEdit && !store.tasks.length ? 'form' : 'list')
 function startFocus() {
   const task = timer.task ?? store.tasks.find((task) => !task.completed)
   if (task) focus(task.id)
 }
 const editing = ref<Task>()
+watch(
+  () => [access.canEdit, access.generation],
+  () => {
+    editing.value = undefined
+    workspaceOpen.value = false
+    view.value = access.canEdit && !store.tasks.length ? 'form' : 'list'
+  },
+)
 const heading = ref<HTMLElement>()
 const notice = ref('')
 const title = computed(() =>
   editing.value ? 'Edit task' : store.tasks.length ? 'Add a task' : 'Add your first task',
 )
 function create() {
+  if (!access.canEdit) return
   editing.value = undefined
   view.value = 'form'
 }
 function edit(task: Task) {
+  if (!access.canEdit) return
   editing.value = task
   view.value = 'form'
 }
@@ -67,8 +90,14 @@ function save(input: TaskInput) {
         @click.prevent="store.tasks.length ? showList() : create()"
         ><AppIcon name="brand" />FocusFlow</a
       >
-      <WorkspaceTools @focus="focus" @active="workspaceOpen = $event" @tasks="showList" />
+      <WorkspaceTools
+        :key="access.generation + String(access.canEdit)"
+        @focus="focus"
+        @active="workspaceOpen = $event"
+        @tasks="showList"
+      />
     </header>
+    <p v-if="accessNotice" class="access-notice" role="status">{{ accessNotice }}</p>
     <main
       :class="{ 'workspace-hidden': workspaceOpen }"
       :inert="workspaceOpen ? true : undefined"
@@ -99,6 +128,7 @@ function save(input: TaskInput) {
             >
             <button
               v-if="store.tasks.length"
+              :disabled="!access.canEdit"
               aria-label="Add a task"
               title="Add a task"
               @click="create"
@@ -109,10 +139,17 @@ function save(input: TaskInput) {
           <TaskList v-if="store.tasks.length" @edit="edit" @select="focus" />
           <div v-if="!store.tasks.length" class="empty">
             <AppIcon name="list" />
-            <h2>No tasks yet</h2>
-            <button class="primary" @click="create"><AppIcon name="plus" />Create a task</button>
+            <h2>{{ access.canEdit ? 'No tasks yet' : 'Workspace is read-only' }}</h2>
+            <button class="primary" :disabled="!access.canEdit" @click="create">
+              <AppIcon name="plus" />Create a task
+            </button>
           </div>
-          <button v-if="store.remaining" class="primary start-focus" @click="startFocus">
+          <button
+            v-if="store.remaining"
+            class="primary start-focus"
+            :disabled="!access.canEdit"
+            @click="startFocus"
+          >
             Start Focus<AppIcon name="arrow" />
           </button>
         </section>
@@ -156,12 +193,19 @@ function save(input: TaskInput) {
       <p v-if="view === 'list'">
         {{ store.remaining }} tasks to do &middot; {{ store.totalMinutes }} min planned
       </p>
-      <p>{{ persistenceNotice }}</p>
+      <p v-if="access.canEdit">{{ persistenceNotice }}</p>
     </footer>
     <span class="sr-only" role="status">{{ notice }}</span>
   </div>
 </template>
 <style scoped lang="scss">
+.access-notice {
+  margin: 0 24px;
+  color: var(--muted);
+  text-align: center;
+  font-size: 12px;
+}
+
 .workspace-hidden {
   // Descendants (including checked-task marks) can override visibility, but
   // cannot escape the opacity of their containing screen.

@@ -1,4 +1,5 @@
-﻿import { computed, ref } from 'vue'
+﻿import { useWorkspaceAccessStore } from './workspaceAccess'
+import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { useTaskMemoryStore } from './taskMemory'
 import { useFocusHistoryStore } from './focusHistory'
@@ -32,6 +33,7 @@ export function validateTask(input: TaskInput) {
   }
 }
 export const useTasksStore = defineStore('tasks', () => {
+  const access = useWorkspaceAccessStore()
   const memory = useTaskMemoryStore()
   const history = useFocusHistoryStore()
   const tasks = ref<Task[]>([])
@@ -40,6 +42,7 @@ export const useTasksStore = defineStore('tasks', () => {
     tasks.value.filter((t) => !t.completed).reduce((sum, t) => sum + t.duration, 0),
   )
   function save(input: TaskInput, id?: string) {
+    if (!access.canMutate) return false
     if (Object.values(validateTask(input)).some(Boolean)) return false
     const values = { ...input, title: input.title.trim(), priority: input.priority ?? 'Medium' }
     if (id) {
@@ -51,10 +54,12 @@ export const useTasksStore = defineStore('tasks', () => {
     return true
   }
   function remove(id: string) {
+    if (!access.canMutate) return false
     history.discard(id)
     tasks.value = tasks.value.filter((t) => t.id !== id)
   }
   function toggle(id: string) {
+    if (!access.canMutate) return false
     const task = tasks.value.find((t) => t.id === id)
     if (task) {
       if (!task.completed) history.finish(task)
@@ -62,6 +67,7 @@ export const useTasksStore = defineStore('tasks', () => {
     }
   }
   function move(id: string, direction: -1 | 1) {
+    if (!access.canMutate) return false
     const index = tasks.value.findIndex((t) => t.id === id)
     const destination = index + direction
     return moveTo(id, destination)
@@ -69,6 +75,7 @@ export const useTasksStore = defineStore('tasks', () => {
   // Publish a complete order once: synchronous timer/persistence watchers must never
   // observe the selected task temporarily missing during a reorder.
   function moveTo(id: string, destination: number) {
+    if (!access.canMutate) return false
     const index = tasks.value.findIndex((t) => t.id === id)
     if (
       index < 0 ||
@@ -85,6 +92,7 @@ export const useTasksStore = defineStore('tasks', () => {
     return true
   }
   function reorder(id: string, targetId: string, position: 'before' | 'after') {
+    if (!access.canMutate) return false
     const from = tasks.value.findIndex((t) => t.id === id)
     const target = tasks.value.findIndex((t) => t.id === targetId)
     if (from < 0 || target < 0 || id === targetId) return false
