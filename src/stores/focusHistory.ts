@@ -19,16 +19,18 @@ export const useFocusHistoryStore = defineStore('focusHistory', () => {
     const session = sessions.value.find((s) => s.taskId === id)
     if (!session || session.since === undefined) return
     const elapsed = now - session.since
+    const last = session.intervals?.[session.intervals.length - 1]
+    const start = Math.max(session.since, last?.end ?? session.since)
+    const measured = Math.max(0, now - start)
     // Background suspension, sleep, clock changes and long gaps are not proof of work.
-    if (elapsed < 0 || elapsed > 5 * 60000) session.reliable = false
-    if (elapsed > 0 && session.intervals) {
-      const last = session.intervals[session.intervals.length - 1]
-      if (last?.end === session.since) last.end = now
-      else if (!last || last.end <= session.since)
-        session.intervals.push({ start: session.since, end: now })
+    if (elapsed < 0 || elapsed > 5 * 60000 || start > session.since) session.reliable = false
+    if (measured > 0 && session.intervals) {
+      if (last?.end === start) last.end = now
+      else session.intervals.push({ start, end: now })
     }
-    session.actualMs = Math.min(Number.MAX_SAFE_INTEGER, session.actualMs + Math.max(0, elapsed))
-    session.since = now
+    session.actualMs = Math.min(Number.MAX_SAFE_INTEGER, session.actualMs + measured)
+    // Keep the high-water mark when a caller ticks again before the clock catches up.
+    session.since = Math.max(session.since, now)
     if (session.actualMs > MAX_RELIABLE_FOCUS_MS) session.reliable = false
   }
   function begin(task: Task, reliable = true) {
@@ -48,20 +50,28 @@ export const useFocusHistoryStore = defineStore('focusHistory', () => {
       sessions.value.push(session)
       session = sessions.value[sessions.value.length - 1]!
     }
-    session.since ??= Date.now()
+    const now = Date.now()
+    if (now < (session.intervals?.[session.intervals.length - 1]?.end ?? 0))
+      session.reliable = false
+    session.since ??= now
   }
-  function pause(id?: string) {
+  function pause(id?: string, now = Date.now()) {
     if (!access.canMutate) return false
-    tick(id)
+    tick(id, now)
     const session = sessions.value.find((s) => s.taskId === id)
-    if (session) delete session.since
+    if (session) {
+      if (now < (session.intervals?.[session.intervals.length - 1]?.end ?? 0))
+        session.reliable = false
+      delete session.since
+    }
   }
   function finish(task: Task) {
     if (!access.canMutate) return false
-    pause(task.id)
+    const now = Date.now()
+    pause(task.id, now)
     const session = sessions.value.find((s) => s.taskId === task.id)
     if (session && !observations.value.some((o) => o.sessionId === session.sessionId)) {
-      observations.value.push({ ...session, completedAt: Date.now() })
+      observations.value.push({ ...session, completedAt: now })
     }
     discard(task.id)
   }
@@ -104,8 +114,8 @@ export const useFocusHistoryStore = defineStore('focusHistory', () => {
     for (const session of sessions.value) {
       if (session.since !== undefined) {
         session.reliable = false
-        if (session.taskId === activeId) tick(session.taskId)
-        else delete session.since
+        // The timer reconciles the active session after inspecting its original timestamp.
+        if (session.taskId !== activeId) delete session.since
       }
     }
     return valid

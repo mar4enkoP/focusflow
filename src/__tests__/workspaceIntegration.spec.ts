@@ -63,6 +63,39 @@ function workspace(t: ReturnType<typeof tab>) {
     proposal: t.planner.proposal,
   })
 }
+
+it('only persists rollback recovery after the new owner finishes hydration', async () => {
+  let now = 1_700_000_000_000
+  vi.spyOn(Date, 'now').mockImplementation(() => now)
+  const locks = lockService()
+  const a = tab(locks)
+  const b = tab(locks)
+  await flushPromises()
+  a.tasks.save(input)
+  a.timer.select(a.tasks.tasks[0]!.id)
+  a.timer.start()
+  const remaining = a.timer.remaining
+  now -= 60_000
+  vi.mocked(localStorage.setItem).mockClear()
+  b.timer.sync()
+  expect(localStorage.setItem).not.toHaveBeenCalled()
+  const write = localStorage.setItem
+  vi.mocked(localStorage.setItem).mockImplementation((key, value) => {
+    expect(a.access.canEdit).toBe(false)
+    expect(b.access.canEdit).toBe(true)
+    expect(b.access.hydrating).toBe(false)
+    data.set(key, value)
+  })
+  await a.stop()
+  await flushPromises()
+  expect(write).toHaveBeenCalledTimes(1)
+  expect(b.timer.state).toBe('paused')
+  expect(b.timer.remaining).toBe(remaining)
+  expect(b.tasks.tasks).toEqual(a.tasks.tasks)
+  const saved = data.get(STORAGE_KEY)
+  a.timer.sync()
+  expect(data.get(STORAGE_KEY)).toBe(saved)
+})
 function tryMutations(t: ReturnType<typeof tab>) {
   const id = t.tasks.tasks[0]?.id ?? 'missing'
   t.tasks.save(input)
