@@ -8,6 +8,59 @@ function boot() {
   installPersistence(pinia)
   return { pinia, tasks: useTasksStore(pinia), timer: useTimerStore(pinia) }
 }
+it('rejects array timer states without coercing them into valid strings', () => {
+  const raw = JSON.stringify({
+    version: 1,
+    tasks: [],
+    timer: {
+      state: ['ready'],
+      remaining: 0,
+      budget: 0,
+      saved: [],
+    },
+  })
+  localStorage.setItem(STORAGE_KEY, raw)
+  const { tasks } = boot()
+  tasks.save({ title: 'New', duration: 10, category: 'Work' })
+  expect(localStorage.getItem(STORAGE_KEY)).toBe(raw)
+})
+it('publishes an edit as one complete persisted task', () => {
+  const { tasks } = boot()
+  tasks.save({ title: 'Before', duration: 10, category: 'Work' })
+  const write = vi.spyOn(localStorage, 'setItem')
+  tasks.save({ title: 'After', duration: 20, category: 'Health' }, tasks.tasks[0]!.id)
+  const snapshots = write.mock.calls.filter(([key]) => key === STORAGE_KEY)
+  expect(snapshots).toHaveLength(1)
+  expect(JSON.parse(snapshots[0]![1]).tasks[0]).toMatchObject({
+    title: 'After',
+    duration: 20,
+    category: 'Health',
+  })
+})
+
+it.each([
+  [null],
+  [['x', null]],
+  [
+    ['x', { remaining: 1, budget: 2 }],
+    ['x', { remaining: 2, budget: 2 }],
+  ],
+])('preserves malformed or ambiguous saved timer entries %j', (...entries) => {
+  const raw = JSON.stringify({
+    version: 1,
+    tasks: [],
+    timer: {
+      state: 'ready',
+      remaining: 0,
+      budget: 0,
+      saved: entries,
+    },
+  })
+  localStorage.setItem(STORAGE_KEY, raw)
+  const { tasks } = boot()
+  tasks.save({ title: 'New', duration: 10, category: 'Work' })
+  expect(localStorage.getItem(STORAGE_KEY)).toBe(raw)
+})
 beforeEach(() => {
   const data = new Map<string, string>()
   vi.stubGlobal('localStorage', {

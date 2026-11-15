@@ -12,6 +12,7 @@ function position() {
   const element = panel.value
   const anchor = element?.parentElement
   if (!element || !anchor) return
+  element.style.position = 'fixed'
   const rect = anchor.getBoundingClientRect()
   const gap = 6
   const margin = 12
@@ -46,12 +47,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div
-    ref="panel"
-    :popover="supportsPopover ? 'manual' : undefined"
-    class="floating-menu"
-    style="position: fixed"
-  >
+  <div ref="panel" :popover="supportsPopover ? 'manual' : undefined" class="floating-menu">
     <slot />
   </div>
 </template>

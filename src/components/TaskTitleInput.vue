@@ -43,7 +43,7 @@ async function forget(title: string) {
 function choose(entry: TaskMemoryEntry) {
   emit('reuse', entry)
   close()
-  field.value?.focus()
+  field.value?.focus({ preventScroll: true })
   // focus can reopen suggestions; explicit selection should leave the form quiet.
   opened.value = false
 }
@@ -52,7 +52,7 @@ async function keydown(event: KeyboardEvent) {
     event.preventDefault()
     event.stopPropagation()
     close()
-    field.value?.focus()
+    field.value?.focus({ preventScroll: true })
     opened.value = false
     return
   }
@@ -80,7 +80,7 @@ async function keydown(event: KeyboardEvent) {
     if (entry) choose(entry)
   }
 }
-defineExpose({ focus: () => field.value?.focus() })
+defineExpose({ focus: () => field.value?.focus({ preventScroll: true }) })
 </script>
 
 <template>

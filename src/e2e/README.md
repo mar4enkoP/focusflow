@@ -7,12 +7,12 @@ the same origin, so they use the real shared LocalStorage and Web Locks service.
 Install dependencies with `npm ci`, then install Chromium and run:
 
 ```sh
-npx playwright install chromium
+npm run test:e2e:setup
 npm run build
 npm run test:e2e
 ```
 
-On Linux CI, use `npx playwright install --with-deps chromium`. CI runs the suite
+The setup script installs Chromium and required OS dependencies (`--with-deps`). CI runs the suite
 after the production build with two workers and no retries. Failure traces,
 screenshots, and the HTML report are uploaded for seven days.
 
@@ -34,6 +34,15 @@ are ignored by Git.
   controlled clock, supplementing the real navigation tests.
 - Task editing, ordering, completion, deletion, paused timer recovery, extensions,
   and forgetting remembered tasks still work.
+- Production CSP rejects injected inline scripts without breaking task titles,
+  floating menus or theme selection.
+- Undo preserves task identity and order; reload commits deletion and drops Undo.
+- Quota failure plus an unhandled rejection retains current state through a manual
+  UI recovery and exports a recovery JSON without altering stored data.
+
+Missing Chromium is a hard Playwright launch failure, never a skipped test. Run
+the setup script before testing; the test command deliberately does not swallow
+installation or launch errors.
 
 Test-only initialization scripts observe native lock callbacks, LocalStorage
 operations, and editable DOM controls. They fail on writes or editable controls

@@ -39,7 +39,7 @@ export const useTasksStore = defineStore('tasks', () => {
   const tasks = ref<Task[]>([])
   const remaining = computed(() => tasks.value.filter((t) => !t.completed).length)
   const totalMinutes = computed(() =>
-    tasks.value.filter((t) => !t.completed).reduce((sum, t) => sum + t.duration, 0),
+    tasks.value.reduce((sum, t) => sum + (t.completed ? 0 : t.duration), 0),
   )
   function save(input: TaskInput, id?: string) {
     if (!access.canMutate) return false
@@ -48,7 +48,9 @@ export const useTasksStore = defineStore('tasks', () => {
     if (id) {
       const task = tasks.value.find((t) => t.id === id)
       if (!task) return false
-      Object.assign(task, values)
+      // Publish all edited fields together: synchronous persistence must not save
+      // a new title paired with the previous duration/category.
+      tasks.value = tasks.value.map((item) => (item.id === id ? { ...item, ...values } : item))
     } else tasks.value.push({ ...values, id: crypto.randomUUID(), completed: false })
     memory.remember(values)
     return true
