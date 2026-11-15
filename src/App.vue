@@ -1,15 +1,21 @@
-﻿<script setup lang="ts">
-import { computed, nextTick, ref, watch, onMounted, onUnmounted } from 'vue'
+<script setup lang="ts">
+import { computed, nextTick, ref, watch } from 'vue'
+import { useTimerPulse } from './composables/useTimerPulse'
+import { useTaskDeletionStore } from './stores/taskDeletion'
+const deletion = useTaskDeletionStore()
 import { useTasksStore, type Task, type TaskInput } from '@/stores/tasks'
 import AppIcon from '@/components/AppIcon.vue'
 import TaskForm from '@/components/TaskForm.vue'
 import TaskList from '@/components/TaskList.vue'
 import FocusTimer from '@/components/FocusTimer.vue'
+import LegacyFocusBackdrop from '@/components/LegacyFocusBackdrop.vue'
+import { useAppearanceStore } from '@/stores/appearance'
 import FocusBackdrop from '@/components/FocusBackdrop.vue'
 import WorkspaceTools from '@/components/WorkspaceTools.vue'
 import { useWorkspaceAccessStore } from '@/stores/workspaceAccess'
 import { persistenceNotice } from './persistence'
 import { useTimerStore } from '@/stores/timer'
+const appearance = useAppearanceStore()
 const access = useWorkspaceAccessStore()
 const accessNotice = computed(() => {
   if (access.canEdit) return ''
@@ -23,15 +29,8 @@ const accessNotice = computed(() => {
 })
 const timer = useTimerStore()
 const workspaceOpen = ref(false)
-let pulse: ReturnType<typeof setInterval> | undefined
-onMounted(() => {
-  pulse = setInterval(timer.sync, 250)
-  document.addEventListener('visibilitychange', timer.sync)
-})
-onUnmounted(() => {
-  clearInterval(pulse)
-  document.removeEventListener('visibilitychange', timer.sync)
-})
+const workspaceView = ref<'Planner' | 'Analytics'>()
+useTimerPulse(timer, access)
 function focus(id: string) {
   if (!access.canEdit) return
   timer.select(id)
@@ -81,7 +80,19 @@ function save(input: TaskInput) {
 </script>
 <template>
   <div class="app-shell" :class="{ 'is-focus': view === 'focus', 'is-creating': view === 'form' }">
-    <FocusBackdrop :mode="workspaceOpen ? 'workspace' : view" :running="timer.isFocusing" />
+    <Transition name="theme" mode="out-in">
+      <LegacyFocusBackdrop
+        v-if="appearance.theme === '1'"
+        :mode="workspaceOpen ? 'workspace' : view"
+        :running="timer.isFocusing"
+      />
+      <FocusBackdrop
+        v-else
+        :mode="workspaceOpen ? 'workspace' : view"
+        :running="timer.isFocusing"
+        :workspace-view="workspaceView"
+      />
+    </Transition>
     <header>
       <a
         class="brand"
@@ -93,7 +104,12 @@ function save(input: TaskInput) {
       <WorkspaceTools
         :key="access.generation + String(access.canEdit)"
         @focus="focus"
-        @active="workspaceOpen = $event"
+        @active="
+          (active, panel) => {
+            workspaceOpen = active
+            workspaceView = panel
+          }
+        "
         @tasks="showList"
       />
     </header>
@@ -196,9 +212,30 @@ function save(input: TaskInput) {
       <p v-if="access.canEdit">{{ persistenceNotice }}</p>
     </footer>
     <span class="sr-only" role="status">{{ notice }}</span>
+    <div v-if="deletion.title" class="undo-notice" role="status">
+      Task deleted. <button type="button" @click="deletion.undo">Undo</button>
+    </div>
   </div>
 </template>
 <style scoped lang="scss">
+.undo-notice {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  z-index: 100;
+  padding: 8px 12px;
+  background: #18171a;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.theme-enter-active,
+.theme-leave-active {
+  transition: opacity 180ms ease;
+}
+.theme-enter-from,
+.theme-leave-to {
+  opacity: 0;
+}
 .access-notice {
   margin: 0 24px;
   color: var(--muted);
@@ -220,6 +257,26 @@ function save(input: TaskInput) {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  &.is-creating {
+    height: 100dvh;
+    min-height: 0;
+    > header,
+    > footer {
+      flex-shrink: 0;
+    }
+    > main {
+      min-height: 0;
+      overflow-y: auto;
+      overscroll-behavior-y: contain;
+      align-items: flex-start;
+      padding-block: clamp(12px, 3vh, 32px);
+      scrollbar-width: thin;
+    }
+    .creation {
+      margin-block: auto;
+      flex-shrink: 0;
+    }
+  }
   &.is-focus {
     main {
       padding-top: 0;
@@ -255,27 +312,6 @@ main {
   align-items: center;
   justify-content: center;
   padding: 48px 24px 64px;
-  // Keep the light mounted outside the transitioning panels so it never restarts
-  // or changes its bounds when one panel leaves and the next one enters.
-  &::before {
-    content: '';
-    position: absolute;
-    left: 50%;
-    top: 60%;
-    width: min(620px, 96vw);
-    height: min(460px, 70svh);
-    transform: translate(-50%, -35%);
-    z-index: -1;
-    pointer-events: none;
-    mask-image: radial-gradient(ellipse 50% 50% at center, #000 20%, transparent 100%);
-    background:
-      radial-gradient(ellipse at 30% 65%, rgb(var(--ambient-warm) / 10%), transparent 65%),
-      radial-gradient(ellipse at 80% 45%, rgb(var(--ambient-rose) / 5%), transparent 60%);
-    transition: opacity 200ms ease;
-  }
-}
-.is-focus main::before {
-  opacity: 0;
 }
 .creation,
 .task-panel {
@@ -302,31 +338,10 @@ main {
   margin: 0 auto 16px;
   display: grid;
   place-items: center;
-  background:
-    radial-gradient(circle at 47% 54%, #0c0b0e 53%, #171116 62%, transparent 69%),
-    conic-gradient(
-      from 210deg,
-      #191a2a,
-      #29141c 26%,
-      #a82e29 42%,
-      #ff6548 54%,
-      #d83e2d 66%,
-      #43171e 80%,
-      #15131d
-    );
+  background: radial-gradient(circle at 47% 45%, #171519, #0c0b0e 72%);
   box-shadow:
-    inset 0 0 0 1px #ffffff06,
-    -5px 8px 18px #252b4b18;
-  &::before {
-    content: '';
-    position: absolute;
-    inset: -5px;
-    z-index: -1;
-    border-radius: inherit;
-    background: conic-gradient(from 210deg, transparent 30%, #f4472c99 55%, transparent 80%);
-    mask-image: radial-gradient(circle, transparent 49%, #000 65%, transparent 74%);
-    filter: blur(8px);
-  }
+    inset 0 0 0 1px #ffffff0c,
+    0 8px 18px #0003;
   &::after {
     content: '';
     position: absolute;
@@ -535,6 +550,42 @@ progress {
   svg {
     position: absolute;
     right: 16px;
+  }
+}
+
+@media (max-height: 700px) {
+  .app-shell.is-creating {
+    > header {
+      padding-block: 16px;
+    }
+    > footer {
+      padding-bottom: 12px;
+      gap: 8px;
+    }
+    .orb {
+      width: 40px;
+      height: 40px;
+      margin-bottom: 10px;
+    }
+    .intro {
+      margin-bottom: 16px;
+    }
+  }
+}
+@media (max-height: 560px) {
+  .app-shell.is-creating {
+    .orb {
+      display: none;
+    }
+    .intro {
+      margin: 4px 0 12px;
+    }
+    > main {
+      padding-block: 8px;
+    }
+    > header {
+      padding-block: 12px;
+    }
   }
 }
 </style>

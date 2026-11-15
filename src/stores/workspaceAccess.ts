@@ -10,6 +10,18 @@ export const useWorkspaceAccessStore = defineStore('workspaceAccess', () => {
   const hydrated = ref(false)
   const hydrating = ref(false)
   const generation = ref(0)
+  const mutationDepth = ref(0)
+  const revision = ref(0)
+  // Synchronous batching, not rollback; publish once at the outer boundary.
+  function batch<T>(action: () => T): T {
+    mutationDepth.value += 1
+    try {
+      return action()
+    } finally {
+      mutationDepth.value -= 1
+      if (!mutationDepth.value) revision.value += 1
+    }
+  }
   // Ownership alone does not authorize editing: persistence must first hydrate
   // the latest workspace under this lock.
   const ownsLock = computed(() => status.value === 'owner')
@@ -34,6 +46,9 @@ export const useWorkspaceAccessStore = defineStore('workspaceAccess', () => {
     hydrated,
     hydrating,
     generation,
+    mutationDepth,
+    revision,
+    batch,
     canEdit,
     canMutate,
     transition,

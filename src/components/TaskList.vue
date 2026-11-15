@@ -3,6 +3,8 @@ import { useWorkspaceAccessStore } from '@/stores/workspaceAccess'
 import { nextTick, ref } from 'vue'
 import { useTasksStore, type Task } from '@/stores/tasks'
 import AppIcon from './AppIcon.vue'
+import { useTaskDeletionStore } from '@/stores/taskDeletion'
+const deletion = useTaskDeletionStore()
 const access = useWorkspaceAccessStore()
 const store = useTasksStore()
 const dragging = ref<string>()
@@ -146,7 +148,7 @@ defineEmits<{ edit: [task: Task]; select: [id: string] }>()
           class="icon-button delete"
           :aria-label="`Delete ${task.title}`"
           title="Delete task"
-          @click="store.remove(task.id)"
+          @click="deletion.remove(task.id)"
         >
           <AppIcon name="trash" />
         </button>

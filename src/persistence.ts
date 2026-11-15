@@ -24,9 +24,12 @@ interface Snapshot {
 }
 const number = (v: unknown): v is number =>
   typeof v === 'number' && Number.isSafeInteger(v) && v >= 0
-function validTimer(value: Timer) {
+function validTimer(input: unknown): input is Timer {
+  if (!input || typeof input !== 'object') return false
+  const value = input as Record<string, unknown>
   return (
     value &&
+    typeof value.state === 'string' &&
     ['ready', 'running', 'paused', 'expired'].includes(value.state) &&
     number(value.remaining) &&
     number(value.budget) &&
@@ -34,13 +37,20 @@ function validTimer(value: Timer) {
     (value.selectedId === undefined || typeof value.selectedId === 'string') &&
     (value.state !== 'running' || number(value.deadline)) &&
     Array.isArray(value.saved) &&
-    value.saved.every(
-      ([id, session]) =>
+    value.saved.every((entry: unknown) => {
+      if (!Array.isArray(entry) || entry.length !== 2) return false
+      const [id, session] = entry
+      return (
         typeof id === 'string' &&
+        id.trim().length > 0 &&
+        session !== null &&
+        typeof session === 'object' &&
         number(session.remaining) &&
         number(session.budget) &&
-        session.remaining <= session.budget,
-    )
+        session.remaining <= session.budget
+      )
+    }) &&
+    new Set(value.saved.map(([id]) => id)).size === value.saved.length
   )
 }
 export function installPersistence(pinia: Pinia) {
@@ -186,7 +196,7 @@ function installSnapshot(pinia: Pinia, read: (key: string) => string | null) {
       'Saved data unavailable. Changes stay in this visit; existing data is preserved.'
   }
   const save = () => {
-    if (!writable || !access.canEdit) return
+    if (!writable || !access.canEdit || access.mutationDepth) return
     try {
       const serialized = JSON.stringify({
         version: 2,
@@ -205,6 +215,7 @@ function installSnapshot(pinia: Pinia, read: (key: string) => string | null) {
     }
   }
   onScopeDispose(tasks.$subscribe(save, { detached: true, flush: 'sync' }))
+  watch(() => access.revision, save, { flush: 'sync' })
   onScopeDispose(
     timer.$onAction(({ name, after }) => {
       if (name === 'sync')
@@ -256,9 +267,9 @@ function installPlanPersistence(pinia: Pinia, read: (key: string) => string | nu
   }
   let validPreferences = JSON.parse(JSON.stringify(planner.settings))
   watch(
-    () => planner.snapshot(),
+    () => [planner.snapshot(), access.revision],
     () => {
-      if (!writable || !access.canEdit) return
+      if (!writable || !access.canEdit || access.mutationDepth) return
       try {
         if (validSettings(planner.settings))
           validPreferences = JSON.parse(JSON.stringify(planner.settings))
@@ -290,9 +301,11 @@ function installMemoryPersistence(
   const memory = useTaskMemoryStore(pinia)
   let writable = true
   let seeded = false
+  let lastWritten: string | null = null
   memoryNotice.value = ''
   try {
     const raw = read(MEMORY_STORAGE_KEY)
+    lastWritten = raw
     if (raw === null) {
       // Existing tasks seed memory once; an explicitly saved empty memory stays empty.
       for (const task of existingTasks) memory.remember(task, 0)
@@ -335,18 +348,19 @@ function installMemoryPersistence(
     memoryNotice.value =
       'Saved memory is damaged or unavailable. Changes to suggestions stay in this visit; saved data is preserved.'
   const saveMemory = () => {
-    if (!writable || !access.canEdit) return
+    if (!writable || !access.canEdit || access.mutationDepth) return
     try {
-      localStorage.setItem(
-        MEMORY_STORAGE_KEY,
-        JSON.stringify({ version: 1, entries: memory.entries }),
-      )
+      const serialized = JSON.stringify({ version: 1, entries: memory.entries })
+      if (serialized === lastWritten) return
+      localStorage.setItem(MEMORY_STORAGE_KEY, serialized)
+      lastWritten = serialized
       memoryNotice.value = ''
     } catch {
       memoryNotice.value = 'Could not save task memory. Suggestions stay in this visit.'
     }
   }
   onScopeDispose(memory.$subscribe(saveMemory, { detached: true, flush: 'sync' }))
+  watch(() => access.revision, saveMemory, { flush: 'sync' })
   return () => {
     if (seeded) saveMemory()
   }
