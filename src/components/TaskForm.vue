@@ -5,6 +5,7 @@ import { categories, priorities, validateTask, type Task, type TaskInput } from 
 import AppIcon from './AppIcon.vue'
 import FloatingMenu from './FloatingMenu.vue'
 import TaskTitleInput from './TaskTitleInput.vue'
+import WelcomeIntro from './WelcomeIntro.vue'
 import { normalizeTitle, useTaskMemoryStore, type TaskMemoryEntry } from '@/stores/taskMemory'
 import { useFocusHistoryStore } from '@/stores/focusHistory'
 import { estimateDuration } from '@/estimation'
@@ -25,6 +26,7 @@ function dismissWelcomeError() {
 }
 async function finishReveal() {
   revealing.value = false
+  emit('revealed')
   await nextTick()
   durationField.value?.focus({ preventScroll: true })
   durationField.value?.select()
@@ -51,7 +53,7 @@ function titleKey(event: KeyboardEvent) {
     if (!event.isComposing && !event.repeat && compact.value && access.canEdit) void reveal()
   }
 }
-const emit = defineEmits<{ save: [input: TaskInput]; cancel: []; expand: [] }>()
+const emit = defineEmits<{ save: [input: TaskInput]; cancel: []; expand: []; revealed: [] }>()
 const input = reactive<TaskInput>({
   title: props.task?.title ?? '',
   duration: props.task?.duration ?? 25,
@@ -136,7 +138,10 @@ function categoryKey(event: KeyboardEvent) {
 function outsideCategory(event: PointerEvent) {
   if (!categoryRoot.value?.contains(event.target as Node)) closeCategory()
 }
-onMounted(() => document.addEventListener('pointerdown', outsideCategory))
+onMounted(() => {
+  document.addEventListener('pointerdown', outsideCategory)
+  if (props.welcome) titleField.value?.focus()
+})
 onUnmounted(() => document.removeEventListener('pointerdown', outsideCategory))
 defineExpose({
   focusTitle: () => titleField.value?.focus({ suggestions: false }),
@@ -169,6 +174,7 @@ async function submit() {
     @submit.prevent="submit"
     @keydown.esc.prevent="!welcome && emit('cancel')"
   >
+    <WelcomeIntro v-if="welcome" :compact="compact" />
     <div class="title-stage" @keydown="titleKey">
       <TaskTitleInput
         ref="titleField"
@@ -327,7 +333,8 @@ async function submit() {
   --glass-highlight: inset 0 1px 0 #ffffff0b, inset 0 -1px 0 #ffffff03;
   --floating-glass-fill: linear-gradient(115deg, #ffffff09, #ffffff02), rgb(18 16 20 / 48%);
   &.welcome-form {
-    min-height: 320px;
+    min-height: 390px;
+    padding-top: 70px;
   }
   .title-stage {
     transition: transform 650ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -382,9 +389,8 @@ async function submit() {
     }
   }
   &.is-compact {
-    min-height: 184px;
     .title-stage {
-      transform: translateY(48px);
+      transform: translateY(100px);
     }
     // Fade the glass itself, not its ancestor: ancestor opacity creates a
     // temporary backdrop root and changes blur sampling when the fade ends.
@@ -393,8 +399,6 @@ async function submit() {
       animation: welcome-field 850ms ease 760ms backwards;
     }
     .form-remainder {
-      position: absolute;
-      inset: 0;
       visibility: hidden;
     }
   }

@@ -80,6 +80,7 @@ function startFocus() {
 const editing = ref<Task>()
 const welcome = ref(access.canEdit && !store.tasks.length)
 const welcomeExpanded = ref(false)
+const welcomeRevealed = ref(false)
 const backdrop = ref<InstanceType<typeof FocusBackdrop>>()
 
 let startupChecked = access.canEdit
@@ -166,6 +167,7 @@ function save(input: TaskInput) {
     :class="{
       'is-focus': view === 'focus',
       'is-creating': view === 'form',
+      'welcome-scene': !contentReady || (welcome && view === 'form'),
       'is-welcome-intro': welcome && !welcomeExpanded && view === 'form' && !workspaceOpen,
       'is-welcome-expanded': welcome && welcomeExpanded && view === 'form' && !workspaceOpen,
     }"
@@ -183,6 +185,7 @@ function save(input: TaskInput) {
       :class="{ 'light-concealed': appearance.theme === '1' && (view !== 'form' || workspaceOpen) }"
       ref="backdrop"
       :mode="workspaceOpen ? 'workspace' : view"
+      :welcome="welcome"
       :compact="welcome && !welcomeExpanded"
       :running="timer.isFocusing"
       :workspace-view="workspaceView"
@@ -196,7 +199,6 @@ function save(input: TaskInput) {
         ><AppIcon name="brand" />FocusFlow</a
       >
       <WorkspaceTools
-        anchored
         :key="access.generation + String(access.canEdit)"
         @focus="focus"
         @active="
@@ -209,7 +211,7 @@ function save(input: TaskInput) {
       />
     </header>
     <ScreenHeading
-      v-if="contentReady"
+      v-if="contentReady && !workspaceOpen && view !== 'focus' && (!welcome || welcomeRevealed)"
       ref="heading"
       :id="titleId"
       :text="screenTitle"
@@ -227,10 +229,10 @@ function save(input: TaskInput) {
     >
       <Transition
         v-if="contentReady"
-        name="scene"
+        :name="welcome ? 'panel' : 'scene'"
         mode="out-in"
         :duration="reducedMotion ? 0 : { enter: 700, leave: 360 }"
-        appear
+        :appear="!welcome"
         @after-enter="panelEntered"
         @enter="panelEntering"
         @before-leave="panelLeaving"
@@ -242,6 +244,7 @@ function save(input: TaskInput) {
             :task="editing"
             :welcome="welcome"
             @expand="expandWelcome"
+            @revealed="welcomeRevealed = true"
             @save="save"
             @cancel="showList"
           />
@@ -282,7 +285,6 @@ function save(input: TaskInput) {
       </Transition>
     </main>
     <footer
-      v-if="contentReady"
       :class="{ 'workspace-hidden': workspaceOpen }"
       :inert="workspaceOpen ? true : undefined"
       :aria-hidden="workspaceOpen || undefined"
@@ -317,10 +319,10 @@ function save(input: TaskInput) {
         ><span class="dock-duration">{{ store.totalMinutes }} min</span><span>Tasks</span
         ><AppIcon name="arrow" />
       </button>
-      <p v-if="view === 'list'">
+      <p v-if="contentReady && view === 'list'">
         {{ store.remaining }} tasks to do &middot; {{ store.totalMinutes }} min planned
       </p>
-      <p v-if="access.canEdit">{{ persistenceNotice }}</p>
+      <p v-if="access.canEdit || !showAccessNotice">{{ persistenceNotice }}</p>
     </footer>
     <span class="sr-only" role="status">{{ notice }}</span>
     <div v-if="deletion.title" class="undo-notice" role="status">
@@ -329,6 +331,79 @@ function save(input: TaskInput) {
   </div>
 </template>
 <style scoped lang="scss">
+.app-shell.welcome-scene {
+  --welcome-header-height: 86px;
+  display: flex;
+  flex-direction: column;
+  > header {
+    height: auto;
+    padding: 28px 40px;
+    flex-shrink: 0;
+  }
+  > footer {
+    position: static;
+    padding: 0 24px 24px;
+    flex-shrink: 0;
+  }
+  > main {
+    position: relative;
+    top: auto;
+    bottom: auto;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: clamp(12px, 3vh, 32px) 24px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    > .creation {
+      margin-block: auto;
+      flex-shrink: 0;
+    }
+  }
+  &.is-welcome-expanded > main {
+    padding-top: max(12px, calc(var(--screen-content-top) - var(--welcome-header-height) - 70px));
+    > .creation {
+      margin-block: 0;
+    }
+  }
+}
+
+@media (max-width: 600px) {
+  .app-shell.welcome-scene {
+    --welcome-header-height: 78px;
+    > header {
+      padding: 24px;
+    }
+    > main {
+      padding-inline: 16px;
+    }
+  }
+}
+@media (max-height: 700px) {
+  .app-shell.welcome-scene {
+    --welcome-header-height: 62px;
+    > header {
+      padding-block: 16px;
+    }
+    > footer {
+      padding-bottom: 12px;
+      gap: 8px;
+    }
+  }
+}
+@media (max-height: 560px) {
+  .app-shell.welcome-scene {
+    --welcome-header-height: 54px;
+    > header {
+      padding-block: 12px;
+    }
+    &.is-welcome-intro > main {
+      padding-block: 8px;
+    }
+  }
+}
 // The title is outside this transition. Move the body as one piece, and fade
 // glass surfaces directly so their backdrop sampling stays attached to the light.
 @media (prefers-reduced-motion: no-preference) {
@@ -424,15 +499,6 @@ function save(input: TaskInput) {
   height: 100dvh;
   min-height: 0;
   overflow: hidden;
-  &.is-welcome-intro {
-    // Center the visible introduction, rather than the hidden expanded form.
-    --screen-title-top: max(calc(var(--app-header-height) + 24px), calc(50dvh - 106px));
-    --screen-content-top: calc(var(--screen-title-top) + var(--screen-title-height) + 12px);
-  }
-  &.is-welcome-expanded > main {
-    // Enable repositioning only after Enter, never while startup data hydrates.
-    transition: top 650ms cubic-bezier(0.22, 1, 0.36, 1);
-  }
 }
 header {
   position: relative;

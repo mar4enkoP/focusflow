@@ -8,6 +8,7 @@ const props = withDefaults(
     running?: boolean
     workspaceView?: 'Planner' | 'Analytics'
     compact?: boolean
+    welcome?: boolean
   }>(),
   { mode: 'focus', running: false },
 )
@@ -161,6 +162,22 @@ function locate() {
           angle: 0,
           power: 0.65,
         }
+  } else if (props.mode === 'form' && props.welcome) {
+    // Match the approved welcome bow in viewport coordinates. Both forms and
+    // the list now keep this same source alive across panel transitions.
+    const opening = props.compact ? 0 : 1
+    const scale = (580 / 600) * (1 + opening * 0.04)
+    const anchor = (110 - opening * 45 - 150) * scale
+    const angle = (-12 * Math.PI) / 180
+    pose = {
+      x: cx - Math.sin(angle) * anchor,
+      y: panel.top - bounds.top + 140 + opening * 110 + Math.cos(angle) * anchor,
+      width: (550 + opening * 30) * scale,
+      bend: (110 + opening * 65) * scale,
+      depth: (160 - opening * 15) * scale,
+      angle: -12,
+      power: 1,
+    }
   } else if (props.mode === 'form') {
     // Measure the resting form position, not its transient slide-in translation.
     // Otherwise the first fade starts too low and the next layout read lifts it.
