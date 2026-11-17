@@ -118,6 +118,10 @@ export async function addTask(page: Page, title: string) {
     await page.getByRole('button', { name: 'Add a task', exact: true }).click()
   }
   await page.getByRole('combobox', { name: 'Task title' }).fill(title)
+  if (await page.locator('form.is-compact').count()) {
+    await page.getByRole('combobox', { name: 'Task title' }).press('Enter')
+    await expect(page.getByLabel('Estimated minutes')).toBeFocused()
+  }
   await page.getByRole('button', { name: 'Add task', exact: true }).click()
   await expect(page.getByRole('button', { name: `Focus on ${title}`, exact: true })).toBeVisible()
 }

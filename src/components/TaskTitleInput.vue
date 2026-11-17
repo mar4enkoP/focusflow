@@ -9,7 +9,12 @@ import FloatingMenu from './FloatingMenu.vue'
 
 const access = useWorkspaceAccessStore()
 const title = defineModel<string>({ required: true })
-defineProps<{ category: Category; error: string }>()
+const props = defineProps<{
+  category: Category
+  error: string
+  minimal?: boolean
+  hintId?: string
+}>()
 const emit = defineEmits<{ reuse: [entry: TaskMemoryEntry] }>()
 const memory = useTaskMemoryStore()
 const field = ref<HTMLInputElement>()
@@ -19,7 +24,9 @@ const managing = ref(false)
 const selected = ref(-1)
 const listId = useId()
 const suggestions = computed(() => (title.value.trim() ? memory.matches(title.value) : []))
-const visible = computed(() => opened.value && !managing.value && suggestions.value.length > 0)
+const visible = computed(
+  () => !props.minimal && opened.value && !managing.value && suggestions.value.length > 0,
+)
 const allEntries = computed(() => memory.matches(''))
 function close() {
   opened.value = false
@@ -61,7 +68,7 @@ async function keydown(event: KeyboardEvent) {
     close()
     return
   }
-  if (['ArrowDown', 'ArrowUp'].includes(event.key) && suggestions.value.length) {
+  if (!props.minimal && ['ArrowDown', 'ArrowUp'].includes(event.key) && suggestions.value.length) {
     event.preventDefault()
     managing.value = false
     opened.value = true
@@ -80,7 +87,13 @@ async function keydown(event: KeyboardEvent) {
     if (entry) choose(entry)
   }
 }
-defineExpose({ focus: () => field.value?.focus({ preventScroll: true }) })
+defineExpose({
+  focus: ({ suggestions = true } = {}) => {
+    field.value?.focus({ preventScroll: true })
+    if (!suggestions) close()
+  },
+  close,
+})
 </script>
 
 <template>
@@ -90,13 +103,14 @@ defineExpose({ focus: () => field.value?.focus({ preventScroll: true }) })
     @keydown="keydown"
     @focusout="!root?.contains($event.relatedTarget as Node) && close()"
   >
-    <div class="title-label">
-      <label for="task-title">Task title</label>
+    <div class="title-label" :class="{ 'minimal-label': minimal }">
+      <label for="task-title" data-form-part>Task title</label>
       <button
         :disabled="!access.canEdit"
-        v-if="memory.entries.length || memoryNotice || managing"
+        v-if="!minimal && (memory.entries.length || memoryNotice || managing)"
         type="button"
         class="memory-toggle"
+        data-form-part
         :aria-expanded="managing"
         :aria-controls="`${listId}-management`"
         @click="toggleManagement"
@@ -105,7 +119,7 @@ defineExpose({ focus: () => field.value?.focus({ preventScroll: true }) })
       </button>
     </div>
     <div class="title-anchor">
-      <div class="title-field">
+      <div class="title-field" data-form-part>
         <AppIcon :name="category" />
         <input
           :disabled="!access.canEdit"
@@ -120,7 +134,7 @@ defineExpose({ focus: () => field.value?.focus({ preventScroll: true }) })
           :aria-controls="listId"
           :aria-activedescendant="visible && selected >= 0 ? `${listId}-${selected}` : undefined"
           :aria-invalid="!!error"
-          :aria-describedby="error ? 'title-error' : undefined"
+          :aria-describedby="minimal ? hintId : error ? 'title-error' : hintId"
           @input="typed"
           @focus="opened = true"
         />
@@ -178,12 +192,16 @@ defineExpose({ focus: () => field.value?.focus({ preventScroll: true }) })
         </FloatingMenu>
       </Transition>
     </div>
-    <p v-if="memoryNotice" class="memory-help" role="status">{{ memoryNotice }}</p>
-    <p v-if="error" id="title-error" class="error">{{ error }}</p>
+    <p v-if="memoryNotice" class="memory-help" role="status" data-form-part>{{ memoryNotice }}</p>
+    <p v-if="error && !minimal" id="title-error" class="error" data-form-part>{{ error }}</p>
   </div>
 </template>
 
 <style scoped lang="scss">
+.minimal-label {
+  opacity: 0;
+  pointer-events: none;
+}
 .title-anchor {
   position: relative;
 }
@@ -204,6 +222,7 @@ label,
   padding: 0 8px;
   border: 1px solid var(--glass-edge);
   background: var(--glass-fill);
+  -webkit-backdrop-filter: blur(var(--surface-blur));
   backdrop-filter: blur(var(--surface-blur));
   box-shadow: var(--glass-highlight);
   border-radius: 7px;
@@ -221,6 +240,7 @@ label,
   border: 1px solid var(--glass-edge);
   border-radius: var(--control-radius);
   background: var(--glass-fill);
+  -webkit-backdrop-filter: blur(var(--surface-blur));
   backdrop-filter: blur(var(--surface-blur));
   box-shadow: var(--glass-highlight);
   transition:

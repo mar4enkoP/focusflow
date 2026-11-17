@@ -1,4 +1,11 @@
 ﻿:root {
+  --app-header-height: 80px;
+  --screen-title-top: clamp(128px, 22vh, 228px);
+  --screen-title-height: 68px;
+  --screen-content-top: calc(var(--screen-title-top) + var(--screen-title-height) + 28px);
+  --screen-bottom: 104px;
+  --screen-enter: 700ms;
+  --screen-leave: 360ms;
   color-scheme: dark;
   --text: #eeeeef;
   --muted: #aaa6ae;
@@ -108,6 +115,10 @@ button.primary {
   background: linear-gradient(110deg, #ffffff0c, #ae483114);
 }
 @media (prefers-reduced-motion: reduce) {
+  :root {
+    --screen-enter: 0ms;
+    --screen-leave: 0ms;
+  }
   *,
   *::before,
   *::after {
@@ -119,6 +130,21 @@ button.primary {
   button.icon-button {
     width: 36px;
     height: 36px;
+  }
+}
+@media (max-height: 650px) {
+  :root {
+    --app-header-height: 64px;
+    --screen-title-top: 112px;
+    --screen-title-height: 60px;
+    --screen-content-top: calc(var(--screen-title-top) + var(--screen-title-height) + 20px);
+  }
+}
+@media (max-height: 480px) {
+  :root {
+    --app-header-height: 56px;
+    --screen-title-top: 76px;
+    --screen-content-top: calc(var(--screen-title-top) + var(--screen-title-height) + 12px);
   }
 }
 
