@@ -35,9 +35,38 @@ test('reduced motion still reveals and focuses the form', async ({ page }) => {
   await page.goto('/')
   const title = page.getByLabel('Task title', { exact: true })
   await expect(title).toBeEditable()
+  const light = page.locator('.focus-backdrop[data-mode="form"] .light-field')
+  await expect(light).toBeVisible()
+  const originalLight = await light.elementHandle()
+  const compactShape = await light.locator(':scope > g').getAttribute('transform')
+  await expect(page.locator('.welcome-intro .line-mask > span').first()).toHaveCSS(
+    'animation-name',
+    'none',
+  )
   await title.fill('A calm start')
   await title.press('Enter')
   await expect(page.getByLabel('Estimated minutes')).toBeFocused()
-  await expect(page.locator('.welcome-light')).toHaveCSS('animation-name', 'none')
-  await expect(page.locator('.line-mask > span').first()).toHaveCSS('animation-name', 'none')
+  await expect(title).toHaveValue('A calm start')
+  await expect(page.locator('.welcome-intro h1')).toHaveCount(0)
+  const heading = page.locator('.screen-heading .heading-line-text')
+  await expect(heading).toHaveText('Set up your first task.')
+  await expect(heading).toHaveCSS('animation-name', 'none')
+  await expect(heading).toHaveCSS('transition-duration', '0s')
+  await expect(heading).toHaveCSS('transform', 'none')
+  expect(await light.evaluate((element, original) => element === original, originalLight)).toBe(
+    true,
+  )
+  await expect(light.locator(':scope > g')).not.toHaveAttribute('transform', compactShape!)
+  // The SVG light is driven by requestAnimationFrame, not CSS animation-name.
+  // Observe its actual rendered state across the transition's layout rechecks.
+  const frames = await light.evaluate(async (element) => {
+    const states = [element.innerHTML]
+    for (let i = 0; i < 32; i++) {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+      states.push(element.innerHTML)
+    }
+    return [...new Set(states)].length
+  })
+  expect(frames).toBe(1)
+  await expect(light.locator(':scope > g')).toHaveAttribute('opacity', '1')
 })
