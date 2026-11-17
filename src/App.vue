@@ -79,6 +79,24 @@ function startFocus() {
 }
 const editing = ref<Task>()
 const welcome = ref(access.canEdit && !store.tasks.length)
+const listArrival = ref(false)
+let arrivalTimer: ReturnType<typeof setTimeout> | undefined
+watch(
+  contentReady,
+  (ready) => {
+    if (!ready || !store.tasks.length || reducedMotion.value) return
+    listArrival.value = true
+    arrivalTimer = setTimeout(() => {
+      listArrival.value = false
+    }, 1400)
+  },
+  { immediate: true },
+)
+watch([view, workspaceOpen], () => {
+  listArrival.value = false
+  clearTimeout(arrivalTimer)
+})
+onUnmounted(() => clearTimeout(arrivalTimer))
 const welcomeExpanded = ref(false)
 const welcomeRevealed = ref(false)
 const backdrop = ref<InstanceType<typeof FocusBackdrop>>()
@@ -165,6 +183,7 @@ function save(input: TaskInput) {
   <div
     class="app-shell"
     :class="{
+      'list-arrival': listArrival,
       'is-focus': view === 'focus',
       'is-creating': view === 'form',
       'welcome-scene': !contentReady || (welcome && view === 'form'),
@@ -215,6 +234,8 @@ function save(input: TaskInput) {
       ref="heading"
       :id="titleId"
       :text="screenTitle"
+      :initial-delay="listArrival ? 120 : 0"
+      :initial-duration="listArrival ? 1000 : 400"
       :reduced-motion="reducedMotion"
       :relocate="welcome && welcomeExpanded && view === 'form' && !workspaceOpen"
     />
@@ -222,7 +243,7 @@ function save(input: TaskInput) {
       {{ accessNotice }}
     </p>
     <main
-      :class="{ 'workspace-hidden': workspaceOpen }"
+      :class="{ 'workspace-hidden': workspaceOpen, 'task-list-screen': view === 'list' }"
       :inert="workspaceOpen ? true : undefined"
       :aria-hidden="workspaceOpen || undefined"
       @transitionend.self="backdrop?.refresh()"
@@ -232,7 +253,7 @@ function save(input: TaskInput) {
         :name="welcome ? 'panel' : 'scene'"
         mode="out-in"
         :duration="reducedMotion ? 0 : { enter: 700, leave: 360 }"
-        :appear="!welcome"
+        :appear="false"
         @after-enter="panelEntered"
         @enter="panelEntering"
         @before-leave="panelLeaving"
@@ -319,7 +340,7 @@ function save(input: TaskInput) {
         ><span class="dock-duration">{{ store.totalMinutes }} min</span><span>Tasks</span
         ><AppIcon name="arrow" />
       </button>
-      <p v-if="contentReady && view === 'list'">
+      <p v-if="contentReady && view === 'list'" class="task-summary">
         {{ store.remaining }} tasks to do &middot; {{ store.totalMinutes }} min planned
       </p>
       <p v-if="access.canEdit || !showAccessNotice">{{ persistenceNotice }}</p>
@@ -331,25 +352,46 @@ function save(input: TaskInput) {
   </div>
 </template>
 <style scoped lang="scss">
+@media (prefers-reduced-motion: no-preference) {
+  .list-arrival .task-panel {
+    animation: list-arrive 1040ms cubic-bezier(0.22, 1, 0.36, 1) 360ms backwards;
+  }
+  .list-arrival .task-summary {
+    animation: summary-arrive 980ms cubic-bezier(0.22, 1, 0.36, 1) 420ms backwards;
+  }
+}
+@keyframes list-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes summary-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .app-shell.welcome-scene {
-  --welcome-header-height: 86px;
+  --welcome-header-height: var(--app-header-height);
   display: flex;
   flex-direction: column;
-  > header {
-    height: auto;
-    padding: 28px 40px;
-    flex-shrink: 0;
-  }
-  > footer {
-    position: static;
-    padding: 0 24px 24px;
-    flex-shrink: 0;
-  }
+
   > main {
     position: relative;
     top: auto;
     bottom: auto;
     flex: 1;
+    margin-bottom: 40px;
     min-height: 0;
     display: flex;
     align-items: flex-start;
@@ -372,33 +414,14 @@ function save(input: TaskInput) {
 
 @media (max-width: 600px) {
   .app-shell.welcome-scene {
-    --welcome-header-height: 78px;
-    > header {
-      padding: 24px;
-    }
     > main {
       padding-inline: 16px;
     }
   }
 }
-@media (max-height: 700px) {
-  .app-shell.welcome-scene {
-    --welcome-header-height: 62px;
-    > header {
-      padding-block: 16px;
-    }
-    > footer {
-      padding-bottom: 12px;
-      gap: 8px;
-    }
-  }
-}
+
 @media (max-height: 560px) {
   .app-shell.welcome-scene {
-    --welcome-header-height: 54px;
-    > header {
-      padding-block: 12px;
-    }
     &.is-welcome-intro > main {
       padding-block: 8px;
     }
@@ -535,6 +558,24 @@ main {
   scrollbar-width: none;
   &::-webkit-scrollbar {
     display: none;
+  }
+}
+main.task-list-screen {
+  overflow: hidden;
+}
+.task-list-screen > .task-panel {
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+  min-height: 0;
+  > .panel-heading,
+  > .start-focus {
+    flex-shrink: 0;
+  }
+  :deep(.tasks) {
+    min-height: 0;
+    flex-shrink: 1;
+    overscroll-behavior: contain;
   }
 }
 .creation,

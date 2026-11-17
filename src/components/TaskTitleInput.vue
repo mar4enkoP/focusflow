@@ -9,7 +9,7 @@ import FloatingMenu from './FloatingMenu.vue'
 
 const access = useWorkspaceAccessStore()
 const title = defineModel<string>({ required: true })
-const props = defineProps<{
+defineProps<{
   category: Category
   error: string
   minimal?: boolean
@@ -21,28 +21,55 @@ const field = ref<HTMLInputElement>()
 const root = ref<HTMLElement>()
 const opened = ref(false)
 const managing = ref(false)
-const selected = ref(-1)
+const composing = ref(false)
+const atEnd = ref(true)
+const scrollLeft = ref(0)
 const listId = useId()
-const suggestions = computed(() => (title.value.trim() ? memory.matches(title.value) : []))
-const visible = computed(
-  () => !props.minimal && opened.value && !managing.value && suggestions.value.length > 0,
-)
+const completion = computed(() => {
+  if (!opened.value || managing.value || composing.value || !atEnd.value || !title.value.trim())
+    return
+  return memory
+    .matches(title.value)
+    .find(
+      (entry) =>
+        entry.title.length > title.value.length &&
+        entry.title.toLocaleLowerCase().startsWith(title.value.toLocaleLowerCase()),
+    )
+})
+function syncCaret() {
+  const input = field.value
+  atEnd.value =
+    !!input &&
+    input.selectionStart === input.value.length &&
+    input.selectionEnd === input.value.length
+  scrollLeft.value = input?.scrollLeft ?? 0
+}
 const allEntries = computed(() => memory.matches(''))
 function close() {
   opened.value = false
   managing.value = false
-  selected.value = -1
+  syncCaret()
+}
+function focusInput() {
+  opened.value = true
+  syncCaret()
+}
+function compositionEnd() {
+  composing.value = false
+  syncCaret()
 }
 function typed() {
   managing.value = false
   opened.value = true
-  selected.value = -1
+  syncCaret()
 }
 function toggleManagement() {
   managing.value = !managing.value
   opened.value = false
 }
 async function forget(title: string) {
+  // Move focus before removing its button, so focusout stays inside the menu.
+  root.value?.querySelector<HTMLButtonElement>('.memory-toggle')?.focus({ preventScroll: true })
   memory.forget(title)
   await nextTick()
   root.value?.querySelector<HTMLButtonElement>('.memory-toggle')?.focus()
@@ -54,8 +81,9 @@ function choose(entry: TaskMemoryEntry) {
   // focus can reopen suggestions; explicit selection should leave the form quiet.
   opened.value = false
 }
-async function keydown(event: KeyboardEvent) {
-  if (event.key === 'Escape' && (visible.value || managing.value)) {
+function keydown(event: KeyboardEvent) {
+  if (event.isComposing || composing.value) return
+  if (event.key === 'Escape' && (completion.value || managing.value)) {
     event.preventDefault()
     event.stopPropagation()
     close()
@@ -64,29 +92,14 @@ async function keydown(event: KeyboardEvent) {
     return
   }
   if (event.target !== field.value) return
-  if (event.key === 'Tab') {
-    close()
+  if (event.key === 'Tab' && !event.shiftKey && completion.value && access.canEdit) {
+    event.preventDefault()
+    choose(completion.value)
     return
   }
-  if (!props.minimal && ['ArrowDown', 'ArrowUp'].includes(event.key) && suggestions.value.length) {
-    event.preventDefault()
-    managing.value = false
-    opened.value = true
-    selected.value =
-      selected.value < 0
-        ? event.key === 'ArrowDown'
-          ? 0
-          : suggestions.value.length - 1
-        : (selected.value + (event.key === 'ArrowDown' ? 1 : -1) + suggestions.value.length) %
-          suggestions.value.length
-    await nextTick()
-    document.getElementById(`${listId}-${selected.value}`)?.scrollIntoView?.({ block: 'nearest' })
-  } else if (event.key === 'Enter' && visible.value && selected.value >= 0) {
-    event.preventDefault()
-    const entry = suggestions.value[selected.value]
-    if (entry) choose(entry)
-  }
+  if (event.key === 'Tab' || event.key === 'Enter') close()
 }
+
 defineExpose({
   focus: ({ suggestions = true } = {}) => {
     field.value?.focus({ preventScroll: true })
@@ -105,66 +118,62 @@ defineExpose({
   >
     <div class="title-label" :class="{ 'minimal-label': minimal }">
       <label for="task-title" data-form-part>Task title</label>
-      <button
-        :disabled="!access.canEdit"
-        v-if="!minimal && (memory.entries.length || memoryNotice || managing)"
-        type="button"
-        class="memory-toggle"
-        data-form-part
-        :aria-expanded="managing"
-        :aria-controls="`${listId}-management`"
-        @click="toggleManagement"
-      >
-        Remembered tasks
-      </button>
     </div>
     <div class="title-anchor">
       <div class="title-field" data-form-part>
         <AppIcon :name="category" />
-        <input
-          :disabled="!access.canEdit"
-          id="task-title"
-          ref="field"
-          v-model="title"
-          placeholder="Task name"
-          autocomplete="off"
-          role="combobox"
-          aria-autocomplete="list"
-          :aria-expanded="visible"
-          :aria-controls="listId"
-          :aria-activedescendant="visible && selected >= 0 ? `${listId}-${selected}` : undefined"
-          :aria-invalid="!!error"
-          :aria-describedby="minimal ? hintId : error ? 'title-error' : hintId"
-          @input="typed"
-          @focus="opened = true"
-        />
-      </div>
-      <Transition name="panel">
-        <FloatingMenu v-if="visible">
-          <div
-            :id="listId"
-            class="memory-menu"
-            role="listbox"
-            aria-label="Remembered task suggestions"
+        <div class="title-completion">
+          <span v-if="completion" class="ghost-title" aria-hidden="true"
+            ><span :style="{ transform: `translateX(${-scrollLeft}px)` }"
+              ><span class="ghost-prefix">{{ title }}</span
+              >{{ completion.title.slice(title.length) }}</span
+            ></span
           >
-            <div
-              v-for="(entry, index) in suggestions"
-              :id="`${listId}-${index}`"
-              :key="entry.title"
-              :title="entry.title"
-              class="suggestion"
-              role="option"
-              :aria-selected="selected === index"
-              @pointerdown.prevent
-              @click="choose(entry)"
-              @pointermove="selected = index"
-            >
-              <AppIcon :name="entry.category" /><span class="entry-title">{{ entry.title }}</span>
-              <span class="duration">{{ entry.duration }} min</span>
-            </div>
-          </div>
-        </FloatingMenu>
-      </Transition>
+          <input
+            :disabled="!access.canEdit"
+            id="task-title"
+            ref="field"
+            v-model="title"
+            placeholder="Task name"
+            autocomplete="off"
+            aria-autocomplete="inline"
+            :aria-invalid="!!error"
+            :aria-describedby="
+              [
+                minimal ? hintId : error ? 'title-error' : hintId,
+                completion ? `${listId}-completion` : undefined,
+              ]
+                .filter(Boolean)
+                .join(' ') || undefined
+            "
+            @input="typed"
+            @focus="focusInput"
+            @select="syncCaret"
+            @click="syncCaret"
+            @keyup="syncCaret"
+            @scroll="syncCaret"
+            @compositionstart="composing = true"
+            @compositionend="compositionEnd"
+          />
+        </div>
+        <button
+          :disabled="!access.canEdit"
+          v-if="!minimal && (memory.entries.length || memoryNotice || managing)"
+          type="button"
+          class="memory-toggle"
+          aria-label="Remembered tasks"
+          title="Remembered tasks"
+          data-form-part
+          :aria-expanded="managing"
+          :aria-controls="`${listId}-management`"
+          @click="toggleManagement"
+        >
+          <AppIcon name="clock" />
+        </button>
+        <span v-if="completion" :id="`${listId}-completion`" class="sr-only"
+          >Press Tab to complete: {{ completion.title }}</span
+        >
+      </div>
       <Transition name="panel">
         <FloatingMenu v-if="managing">
           <div
@@ -173,9 +182,16 @@ defineExpose({
             role="region"
             aria-label="Remembered tasks"
           >
-            <p class="memory-help">Forget a suggestion without changing your tasks.</p>
+            <p class="memory-help">Choose a remembered task, or forget it.</p>
             <div v-for="entry in allEntries" :key="entry.title" class="memory-row">
-              <AppIcon :name="entry.category" /><span class="entry-title">{{ entry.title }}</span>
+              <AppIcon :name="entry.category" /><button
+                type="button"
+                class="entry-title memory-choice"
+                :disabled="!access.canEdit"
+                @click="choose(entry)"
+              >
+                {{ entry.title }}
+              </button>
               <button
                 :disabled="!access.canEdit"
                 type="button"
@@ -212,24 +228,48 @@ defineExpose({
   gap: 8px;
   margin-bottom: 8px;
 }
-label,
-.memory-toggle {
+label {
   color: var(--muted);
   font-size: 11px;
+  white-space: nowrap;
 }
 .memory-toggle {
   height: 24px;
-  padding: 0 8px;
-  border: 1px solid var(--glass-edge);
-  background: var(--glass-fill);
-  -webkit-backdrop-filter: blur(var(--surface-blur));
-  backdrop-filter: blur(var(--surface-blur));
-  box-shadow: var(--glass-highlight);
-  border-radius: 7px;
-  &:hover {
-    background: var(--glass-hover);
+  width: 24px;
+  flex-shrink: 0;
+  padding: 0;
+  margin-right: -8px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--muted);
+  &:hover:not(:disabled) {
+    background: #ffffff08;
     color: var(--text);
   }
+}
+
+.title-completion {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+.ghost-title {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  pointer-events: none;
+  color: var(--muted);
+  opacity: 0.65;
+  white-space: pre;
+  > span {
+    display: block;
+  }
+}
+.ghost-prefix {
+  visibility: hidden;
 }
 .title-field {
   display: flex;
@@ -266,6 +306,7 @@ label,
     outline: none;
     color: var(--text);
     font: inherit;
+    padding: 0;
   }
   input::placeholder {
     color: #929097;
@@ -279,8 +320,23 @@ label,
   scrollbar-width: thin;
   overscroll-behavior: contain;
 }
-.suggestion,
 .memory-row {
+  position: relative;
+  transition:
+    background 160ms ease,
+    box-shadow 160ms ease;
+  &:hover {
+    background: var(--glass-hover);
+    box-shadow: inset 0 0 0 1px var(--glass-edge);
+  }
+  &:has(.memory-choice:focus-visible) {
+    outline: 1px solid var(--focus-ring);
+    outline-offset: -1px;
+  }
+  > .icon-button {
+    position: relative;
+    z-index: 1;
+  }
   display: flex;
   align-items: center;
   gap: 8px;
@@ -295,24 +351,33 @@ label,
     color: var(--muted);
   }
 }
-.suggestion {
-  height: 32px;
-  cursor: pointer;
-  transition: background var(--motion-fast);
-  .entry-title {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  &:hover,
-  &[aria-selected='true'] {
-    background: var(--glass-hover);
-  }
-}
+
 .entry-title {
   flex: 1;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+.memory-choice {
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 7px;
+  }
+  &:hover:not(:disabled) {
+    background: transparent;
+    box-shadow: none;
+  }
+  &:focus-visible {
+    outline: none;
+  }
+  height: auto;
+  text-align: left;
+  justify-content: flex-start;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font: inherit;
 }
 .duration {
   color: var(--muted);
@@ -334,7 +399,7 @@ label,
   .title-field:focus-within {
     outline: 1px solid Highlight;
   }
-  .suggestion[aria-selected='true'] {
+  .memory-row:has(.memory-choice:focus-visible) {
     outline: 1px solid Highlight;
   }
 }

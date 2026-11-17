@@ -318,7 +318,7 @@ it('offers learned estimates explicitly, preserves memory metadata and manual ed
   const wrapper = mount(TaskForm, { global: { plugins: [pinia] } })
   try {
     await wrapper.get('#task-title').setValue('Prog')
-    await wrapper.get('[role="option"]').trigger('click')
+    await wrapper.get('#task-title').trigger('keydown', { key: 'Tab' })
     expect((wrapper.get('#task-duration').element as HTMLInputElement).value).toBe('30')
     expect(wrapper.text()).toContain('Suggested: 40 min')
     expect(wrapper.get('#task-category').text()).toContain('Study')
@@ -326,7 +326,7 @@ it('offers learned estimates explicitly, preserves memory metadata and manual ed
     expect((wrapper.get('#task-duration').element as HTMLInputElement).value).toBe('40')
     await wrapper.get('#task-duration').setValue('17')
     await wrapper.get('#task-title').setValue('Prog')
-    await wrapper.get('[role="option"]').trigger('click')
+    await wrapper.get('#task-title').trigger('keydown', { key: 'Tab' })
     expect((wrapper.get('#task-duration').element as HTMLInputElement).value).toBe('17')
     await wrapper.get('form').trigger('submit')
     expect(wrapper.emitted('save')?.[0]?.[0]).toMatchObject({

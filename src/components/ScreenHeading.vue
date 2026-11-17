@@ -4,25 +4,29 @@ const props = defineProps<{
   text: string
   id: string
   reducedMotion?: boolean
+  initialDelay?: number
+  initialDuration?: number
   relocate?: boolean
 }>()
 const heldTop = ref<number>()
 const displayedText = ref(props.text)
 const lines = computed(() => displayedText.value.split('\n'))
-const lineDuration = 400
+const lineDuration = computed(() => (appearing.value ? (props.initialDuration ?? 400) : 400))
 const lineStagger = 60
 const overlapOffset = 240
 const appearing = ref(true)
 const transitioning = ref(false)
 const leavingLines = ref(1)
-const enterDelay = computed(() => (appearing.value ? 0 : props.relocate ? 540 : overlapOffset))
+const enterDelay = computed(() =>
+  appearing.value ? (props.initialDelay ?? 0) : props.relocate ? 540 : overlapOffset,
+)
 // Vue must wait for the nested lines, rather than the stationary outer wrapper.
 const duration = computed(() =>
   props.reducedMotion
     ? 0
     : {
-        enter: enterDelay.value + lineDuration + (lines.value.length - 1) * lineStagger,
-        leave: lineDuration + (leavingLines.value - 1) * lineStagger,
+        enter: enterDelay.value + lineDuration.value + (lines.value.length - 1) * lineStagger,
+        leave: 400 + (leavingLines.value - 1) * lineStagger,
       },
 )
 function updateText() {
