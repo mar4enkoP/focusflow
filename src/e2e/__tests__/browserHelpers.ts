@@ -108,19 +108,17 @@ export async function oneOwner(pages: Page[]) {
 export async function addTask(page: Page, title: string) {
   await expect.poll(() => writable(page)).toBe(true)
   await page.getByRole('link', { name: 'FocusFlow home' }).click()
-  await expect(
-    page
-      .getByRole('combobox', { name: 'Task title' })
-      .or(page.getByRole('button', { name: 'Add a task', exact: true }))
-      .first(),
-  ).toBeVisible()
-  if (!(await page.getByRole('combobox', { name: 'Task title' }).isVisible())) {
-    await page.getByRole('button', { name: 'Add a task', exact: true }).click()
+  const titleField = page.getByRole('textbox', { name: 'Task title', exact: true })
+  const openForm = page.getByRole('button', { name: 'Add a task', exact: true })
+  await expect(titleField.or(openForm).first()).toBeVisible()
+  if (!(await titleField.isVisible())) {
+    await openForm.click()
   }
-  await page.getByRole('combobox', { name: 'Task title' }).fill(title)
-  if (await page.locator('form.is-compact').count()) {
-    await page.getByRole('combobox', { name: 'Task title' }).press('Enter')
-    await expect(page.getByLabel('Estimated minutes')).toBeFocused()
+  await titleField.fill(title)
+  const durationField = page.getByRole('spinbutton', { name: 'Estimated minutes', exact: true })
+  if (!(await durationField.isVisible())) {
+    await titleField.press('Enter')
+    await expect(durationField).toBeFocused()
   }
   await page.getByRole('button', { name: 'Add task', exact: true }).click()
   await expect(page.getByRole('button', { name: `Focus on ${title}`, exact: true })).toBeVisible()

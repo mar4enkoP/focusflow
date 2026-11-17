@@ -73,8 +73,15 @@ function move(destination: Light) {
     return
   }
   // First appearance fades in at its anchor instead of flying from the viewport corner.
-  if (light.value.power === 0) light.value = { ...destination, power: 0 }
+  const listArrival = light.value.power === 0 && props.mode === 'list'
+  if (light.value.power === 0)
+    light.value = {
+      ...destination,
+      power: 0,
+      concentration: listArrival ? 0 : destination.concentration,
+    }
   let previous = performance.now()
+  const arrivalStart = previous
   function animate(now: number) {
     const seconds = Math.max(0, (now - previous) / 1000)
     previous = now
@@ -92,6 +99,13 @@ function move(destination: Light) {
         Math.abs(next.velocity) > tolerance
       )
         settled = false
+    }
+    if (listArrival) {
+      const progress = Math.min(1, (now - arrivalStart) / 1400)
+      const intensity = 1 - (1 - progress) ** 3
+      state.power = destination.power * intensity
+      state.concentration = destination.concentration * intensity
+      if (progress < 1) settled = false
     }
     light.value = settled ? { ...destination } : state
     passage.value = Math.min(1, (now - passageStart) / 1400)
@@ -122,6 +136,15 @@ function locate() {
     observedPanel = element
   }
   const panel = element.getBoundingClientRect()
+  if (props.mode === 'list') {
+    // The entrance of the task panel must not retarget the light mid-reveal.
+    const transform = getComputedStyle(element).transform
+    if (transform && transform !== 'none') {
+      const matrix = new DOMMatrixReadOnly(transform)
+      panel.x -= matrix.m41
+      panel.y -= matrix.m42
+    }
+  }
   const cx = panel ? panel.left + panel.width / 2 - bounds.left : w / 2
   const cy = panel ? panel.top + panel.height / 2 - bounds.top : h / 2
   const compact = w < 600

@@ -196,11 +196,8 @@ it('only applies a suggestion explicitly, allows overrides, and never creates a 
   await wrapper.get('#task-title').setValue('Prog')
   expect((wrapper.get('#task-duration').element as HTMLInputElement).value).toBe('17')
   expect((wrapper.get('input[value="Low"]').element as HTMLInputElement).checked).toBe(true)
-  await wrapper.get('#task-title').trigger('keydown', { key: 'ArrowDown' })
-  expect(wrapper.get('#task-title').attributes('aria-activedescendant')).toBe(
-    wrapper.get('[role="option"]').attributes('id'),
-  )
-  await wrapper.get('#task-title').trigger('keydown', { key: 'Enter' })
+  expect(wrapper.find('.ghost-title').exists()).toBe(true)
+  await wrapper.get('#task-title').trigger('keydown', { key: 'Tab' })
   expect(wrapper.emitted('save')).toBeUndefined()
   expect(tasks.tasks).toHaveLength(1)
   expect(memory.entries[0]!.uses).toBe(1)
@@ -214,7 +211,38 @@ it('only applies a suggestion explicitly, allows overrides, and never creates a 
   expect(wrapper.emitted('save')?.[0]?.[0]).toMatchObject({ ...input, duration: 35 })
 })
 
-it('keeps matches beyond the first five reachable with the keyboard', async () => {
+it('keeps inline completion quiet during composition, caret editing and welcome expansion', async () => {
+  const { pinia, tasks } = boot()
+  tasks.save(input)
+  const wrapper = mount(TaskForm, {
+    props: { welcome: true },
+    global: { plugins: [pinia] },
+    attachTo: document.body,
+  })
+  wrappers.push(wrapper)
+  const field = wrapper.get<HTMLInputElement>('#task-title')
+  await field.setValue('Prog')
+  expect(wrapper.find('.ghost-title').exists()).toBe(true)
+  await field.trigger('compositionstart')
+  expect(wrapper.find('.ghost-title').exists()).toBe(false)
+  await field.trigger('keydown', { key: 'Tab', isComposing: true })
+  expect(field.element.value).toBe('Prog')
+  await field.trigger('compositionend')
+  field.element.setSelectionRange(1, 1)
+  await field.trigger('select')
+  expect(wrapper.find('.ghost-title').exists()).toBe(false)
+  field.element.setSelectionRange(4, 4)
+  await field.trigger('select')
+  await field.trigger('keydown', { key: 'Tab', shiftKey: true })
+  expect(field.element.value).toBe('Prog')
+  await field.setValue('Pro')
+  await field.trigger('keydown', { key: 'Enter' })
+  expect(wrapper.find('.ghost-title').exists()).toBe(false)
+  expect(wrapper.find('[role="listbox"]').exists()).toBe(false)
+  expect(wrapper.get('form').classes()).not.toContain('is-compact')
+})
+
+it('keeps all remembered tasks available through the explicit memory button', async () => {
   const { pinia, tasks } = boot()
   for (let index = 0; index < 10; index++) {
     tasks.save({ ...input, title: `Programming ${index}` })
@@ -223,14 +251,11 @@ it('keeps matches beyond the first five reachable with the keyboard', async () =
   wrappers.push(wrapper)
   const field = wrapper.get('#task-title')
   await field.setValue('Programming')
-  const options = wrapper.findAll('[role="option"]')
+  await wrapper.get('.memory-toggle').trigger('click')
+  const options = wrapper.findAll('.memory-choice')
   expect(options).toHaveLength(10)
-  for (let index = 0; index < 6; index++) {
-    await field.trigger('keydown', { key: 'ArrowDown' })
-  }
-  expect(field.attributes('aria-activedescendant')).toBe(options[5]!.attributes('id'))
-  const chosenTitle = options[5]!.get('.entry-title').text()
-  await field.trigger('keydown', { key: 'Enter' })
+  const chosenTitle = options[5]!.text()
+  await options[5]!.trigger('click')
   expect((field.element as HTMLInputElement).value).toBe(chosenTitle)
   expect(wrapper.emitted('save')).toBeUndefined()
 })
@@ -245,7 +270,8 @@ it('supports mouse selection, Escape dismissal, manual new tasks and forgetting 
   expect(wrapper.emitted('cancel')).toBeUndefined()
   expect(wrapper.find('[aria-label="Remembered task suggestions"]').exists()).toBe(false)
   await wrapper.get('#task-title').setValue('pro')
-  await wrapper.get('[role="option"]').trigger('click')
+  await wrapper.get('.memory-toggle').trigger('click')
+  await wrapper.get('.memory-choice').trigger('click')
   expect((wrapper.get('#task-duration').element as HTMLInputElement).value).toBe('60')
   await wrapper.get('.memory-toggle').trigger('click')
   await wrapper.get('[aria-label="Forget Programming"]').trigger('click')
@@ -266,7 +292,7 @@ it('creates a recurring task through the app and learns overridden values only a
   wrappers.push(wrapper)
   await wrapper.get('[aria-label="Add a task"]').trigger('click')
   await wrapper.get('#task-title').setValue('prog')
-  await wrapper.get('[aria-label="Remembered task suggestions"] [role="option"]').trigger('click')
+  await wrapper.get('#task-title').trigger('keydown', { key: 'Tab' })
   await wrapper.get('#task-duration').setValue('40')
   await wrapper.get('input[value="Low"]').setValue(true)
   expect(memory.entries[0]!.duration).toBe(60)

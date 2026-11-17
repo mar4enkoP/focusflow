@@ -159,7 +159,7 @@ test('task editing, reordering, timer pause/reload, completion and memory still 
   await addTask(page, 'First')
   await addTask(page, 'Second')
   await page.getByRole('button', { name: 'Edit First', exact: true }).click()
-  await page.getByRole('combobox', { name: 'Task title' }).fill('Renamed')
+  await page.getByRole('textbox', { name: 'Task title', exact: true }).fill('Renamed')
   await page.getByRole('button', { name: 'Save changes', exact: true }).click()
   await page
     .getByRole('button', { name: 'Reorder Second; use arrow keys', exact: true })
@@ -259,7 +259,7 @@ test('a populated former owner cannot mutate or expire a timer after lifecycle r
   expect(await stored(a)).toEqual(storedBefore)
   expect(await a.evaluate(() => window.workspaceAudit.writes)).toEqual(writesBefore)
   await b.getByRole('button', { name: 'Edit Next task', exact: true }).click()
-  await b.getByRole('combobox', { name: 'Task title' }).fill('Latest task')
+  await b.getByRole('textbox', { name: 'Task title', exact: true }).fill('Latest task')
   await b.getByRole('button', { name: 'Save changes', exact: true }).click()
   await b.close()
   await a.evaluate(() =>
