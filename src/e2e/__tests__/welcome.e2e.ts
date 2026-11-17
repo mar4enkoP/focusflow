@@ -65,7 +65,7 @@ test('reduced motion still reveals and focuses the form', async ({ page }) => {
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
       states.push(element.innerHTML)
     }
-    return [...new Set(states)].length
+    return new Set(states).size
   })
   expect(frames).toBe(1)
   await expect(light.locator(':scope > g')).toHaveAttribute('opacity', '1')
