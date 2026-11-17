@@ -1,25 +1,162 @@
-﻿import { nextTick } from 'vue'
+import { nextTick } from 'vue'
 import { afterEach, describe, it, expect, vi } from 'vitest'
 import { createOwnedPinia as createPinia } from './workspaceTestUtils'
 import { mount } from '@vue/test-utils'
 import App from '../App.vue'
 import { useTimerStore } from '../stores/timer'
 import { useTasksStore } from '../stores/tasks'
+import { useWorkspaceAccessStore } from '../stores/workspaceAccess'
+import WorkspaceTools from '../components/WorkspaceTools.vue'
 const wrappers: ReturnType<typeof mount>[] = []
-function setup() {
+async function setup(welcome = false) {
   const pinia = createPinia()
+  const store = useTasksStore(pinia)
+  if (!welcome)
+    store.tasks.push({
+      id: 'seed',
+      title: 'Saved task',
+      duration: 25,
+      category: 'Work',
+      priority: 'Medium',
+      completed: false,
+    })
   const wrapper = mount(App, { global: { plugins: [pinia] }, attachTo: document.body })
   wrappers.push(wrapper)
+  if (!welcome) {
+    store.remove('seed')
+    await nextTick()
+    await wrapper.get('.empty button').trigger('click')
+  }
   return { wrapper, store: useTasksStore(pinia), timer: useTimerStore(pinia) }
 }
 afterEach(() => {
+  vi.useRealTimers()
   vi.restoreAllMocks()
   wrappers.forEach((w) => w.unmount())
   wrappers.length = 0
 })
 describe('task manager', () => {
+  it.each([false, true])(
+    'waits for hydration before mounting the first screen (saved tasks: %s)',
+    async (hasTasks) => {
+      vi.useFakeTimers()
+      const pinia = createPinia()
+      if (hasTasks)
+        useTasksStore(pinia).save({ title: 'Saved task', duration: 10, category: 'Work' })
+      const access = useWorkspaceAccessStore(pinia)
+      access.transition('waiting')
+      const wrapper = mount(App, { global: { plugins: [pinia] } })
+      wrappers.push(wrapper)
+      expect(wrapper.find('header').exists()).toBe(true)
+      expect(wrapper.find('main section').exists()).toBe(false)
+      expect(wrapper.find('.focus-backdrop').exists()).toBe(false)
+      expect(wrapper.find('footer').exists()).toBe(false)
+      access.transition('owner')
+      await nextTick()
+      // Even slow hydration must not show an empty list or an ordinary form.
+      await vi.advanceTimersByTimeAsync(500)
+      expect(wrapper.find('main section').exists()).toBe(false)
+      access.hydrated = true
+      await nextTick()
+      expect(wrapper.find('.task-panel').exists()).toBe(hasTasks)
+      expect(wrapper.find('form.is-compact').exists()).toBe(!hasTasks)
+      expect(wrapper.find('form:not(.is-compact)').exists()).toBe(false)
+    },
+  )
+  it('keeps brief ownership checks quiet and reports a persistent wait', async () => {
+    vi.useFakeTimers()
+    const pinia = createPinia()
+    const access = useWorkspaceAccessStore(pinia)
+    access.transition('waiting')
+    const wrapper = mount(App, { global: { plugins: [pinia] } })
+    wrappers.push(wrapper)
+    expect(wrapper.find('.access-notice').exists()).toBe(false)
+    await vi.advanceTimersByTimeAsync(100)
+    access.transition('owner')
+    access.hydrated = true
+    await nextTick()
+    await vi.advanceTimersByTimeAsync(500)
+    expect(wrapper.find('.access-notice').exists()).toBe(false)
+    access.transition('waiting')
+    await nextTick()
+    await vi.advanceTimersByTimeAsync(400)
+    expect(wrapper.get('.access-notice').text()).toContain('Close the other FocusFlow tab')
+    access.transition('owner')
+    access.hydrated = true
+    await nextTick()
+    expect(wrapper.find('.access-notice').exists()).toBe(false)
+    access.transition('error', 'Connection failed')
+    await nextTick()
+    expect(wrapper.get('.access-notice').text()).toContain('Connection failed')
+  })
+  it('reveals the same title field before saving and focuses duration', async () => {
+    vi.useFakeTimers()
+    const { wrapper, store } = await setup(true)
+    const source = wrapper.get('.focus-backdrop').element
+    const title = wrapper.get('#task-title').element
+    expect(wrapper.findAll('button').some((button) => button.text() === 'Cancel')).toBe(false)
+    await wrapper.get('form').trigger('keydown', { key: 'Escape' })
+    wrapper.getComponent(WorkspaceTools).vm.$emit('tasks')
+    await nextTick()
+    expect(wrapper.get('form').classes()).toContain('is-compact')
+    expect(wrapper.get('.app-shell').classes()).toContain('is-welcome-intro')
+    expect(wrapper.find('.task-panel').exists()).toBe(false)
+    expect(wrapper.get('.form-remainder').attributes('inert')).toBeDefined()
+    expect(wrapper.get('#welcome-hint kbd').attributes('aria-label')).toBe('Enter')
+    await wrapper.get('#task-title').setValue('   ')
+    await wrapper.get('#task-title').trigger('keydown', { key: 'Enter' })
+    expect(wrapper.get('#welcome-hint').text()).toBe('Give your task a title')
+    expect(wrapper.find('.title-memory .error').exists()).toBe(false)
+    expect(wrapper.get('#task-title').attributes('aria-describedby')).toBe('welcome-hint')
+    expect(wrapper.get('#task-title').attributes('aria-invalid')).toBe('true')
+    await vi.advanceTimersByTimeAsync(2500)
+    expect(wrapper.get('#welcome-hint kbd').text()).toContain('Enter')
+    await wrapper.get('#task-title').trigger('keydown', { key: 'Enter' })
+    expect(wrapper.get('#welcome-hint').text()).toBe('Give your task a title')
+    expect(wrapper.get('form').classes()).toContain('is-compact')
+    await wrapper.get('#task-title').setValue('First focus')
+    expect(wrapper.get('#welcome-hint kbd').text()).toContain('Enter')
+    await wrapper.get('#task-title').trigger('keydown', { key: 'Enter', isComposing: true })
+    expect(wrapper.get('form').classes()).toContain('is-compact')
+    await wrapper.get('#task-title').trigger('keydown', { key: 'Enter' })
+    expect(wrapper.get('#task-title').element).toBe(title)
+    expect(wrapper.get('form').classes()).not.toContain('is-compact')
+    expect(wrapper.get('.app-shell').classes()).not.toContain('is-welcome-intro')
+    await wrapper.get('form').trigger('submit')
+    expect(store.tasks).toHaveLength(0)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(document.activeElement?.id).toBe('task-duration')
+    expect(wrapper.get('.form-remainder').attributes('inert')).toBeUndefined()
+    expect(wrapper.get('#creation-title').text()).toBe('Set up your first task.')
+    expect(wrapper.get('.completion-hint').text()).toContain('Choose your details, then press')
+    expect(wrapper.get('.completion-hint .hint-action').text()).toBe('Add task')
+    await wrapper.get('form').trigger('keydown', { key: 'Escape' })
+    wrapper.getComponent(WorkspaceTools).vm.$emit('tasks')
+    await nextTick()
+    expect(wrapper.get('#task-title').element).toBe(title)
+    expect(wrapper.find('.task-panel').exists()).toBe(false)
+    await wrapper.get('#task-duration').setValue('15')
+    await wrapper.get('form').trigger('submit')
+    expect(store.tasks[0]).toMatchObject({ title: 'First focus', duration: 15 })
+    expect(wrapper.get('.focus-backdrop').element).toBe(source)
+    expect(wrapper.get('.focus-backdrop').attributes('data-mode')).toBe('list')
+    await wrapper.get('[aria-label="Delete First focus"]').trigger('click')
+    await wrapper.get('.empty button').trigger('click')
+    expect(wrapper.find('.welcome-intro').exists()).toBe(false)
+    expect(wrapper.find('.completion-hint').exists()).toBe(false)
+    await wrapper.get('.actions .quiet').trigger('click')
+    expect(wrapper.find('.task-panel').exists()).toBe(true)
+  })
+  it('skips welcome when tasks already exist at startup', () => {
+    const pinia = createPinia()
+    useTasksStore(pinia).save({ title: 'Existing task', duration: 10, category: 'Work' })
+    const wrapper = mount(App, { global: { plugins: [pinia] } })
+    wrappers.push(wrapper)
+    expect(wrapper.find('.welcome-intro').exists()).toBe(false)
+    expect(wrapper.find('.task-panel').exists()).toBe(true)
+  })
   it('navigates categories by keyboard and dismisses the menu before the form', async () => {
-    const { wrapper } = setup()
+    const { wrapper } = await setup()
     const focus = vi.spyOn(HTMLElement.prototype, 'focus')
     await wrapper.get('#task-category').trigger('keydown', { key: 'ArrowDown' })
     await nextTick()
@@ -32,12 +169,13 @@ describe('task manager', () => {
     expect(wrapper.find('[role="listbox"]').exists()).toBe(false)
     expect(document.activeElement?.id).toBe('task-category')
     expect(wrapper.find('form').exists()).toBe(true)
-    await wrapper.get('button.quiet').trigger('click')
+    expect(wrapper.get('.actions .quiet').text()).toBe('Cancel')
+    await wrapper.get('form').trigger('keydown', { key: 'Escape' })
     expect(wrapper.find('form').exists()).toBe(false)
-    expect(document.activeElement?.id).toBe('list-title')
+    expect(wrapper.find('.task-panel').exists()).toBe(true)
   })
   it('opens focus without starting, hides empty content, and preserves editing', async () => {
-    const { wrapper, store, timer } = setup()
+    const { wrapper, store, timer } = await setup()
     await wrapper.get('#task-title').setValue('First task')
     await wrapper.get('form').trigger('submit')
     expect(wrapper.find('.empty').exists()).toBe(false)
@@ -57,6 +195,8 @@ describe('task manager', () => {
     await wrapper.get('[aria-label="Open task panel"]').trigger('click')
     expect(wrapper.find('.empty').exists()).toBe(false)
     await wrapper.get('[aria-label="Edit First task"]').trigger('click')
+    expect(wrapper.get('#creation-title').text()).toBe('Refine your task.')
+    expect(wrapper.find('.completion-hint').exists()).toBe(false)
     await wrapper.get('#task-title').setValue('Edited task')
     await wrapper.get('form').trigger('submit')
     expect(store.tasks[0]!.title).toBe('Edited task')
@@ -64,8 +204,65 @@ describe('task manager', () => {
     expect(timer.state).toBe('paused')
     expect(wrapper.text()).toContain('Edited task')
   })
+  it('offers hint-free creation and editing with cancellation after the first task', async () => {
+    const { wrapper, store } = await setup()
+    await wrapper.get('#task-title').setValue('Keep this task')
+    await wrapper.get('form').trigger('submit')
+    const saved = { ...store.tasks[0]! }
+
+    await wrapper.get('[aria-label="Add a task"]').trigger('click')
+    expect(wrapper.find('#welcome-hint').exists()).toBe(false)
+    expect(wrapper.find('.completion-hint').exists()).toBe(false)
+    await wrapper.get('#task-title').setValue('Discard this draft')
+    await wrapper.get('.actions .quiet').trigger('click')
+    expect(wrapper.find('.task-panel').exists()).toBe(true)
+    expect(store.tasks).toEqual([saved])
+
+    await wrapper.get('[aria-label="Edit Keep this task"]').trigger('click')
+    expect(wrapper.find('#welcome-hint').exists()).toBe(false)
+    expect(wrapper.find('.completion-hint').exists()).toBe(false)
+    await wrapper.get('#task-title').setValue('Discard this edit')
+    await wrapper.get('#task-duration').setValue('60')
+    await wrapper.get('.actions .quiet').trigger('click')
+    expect(wrapper.find('.task-panel').exists()).toBe(true)
+    expect(store.tasks).toEqual([saved])
+  })
+  it('waits for the form transition before focusing and closes popups on departure', async () => {
+    vi.useFakeTimers()
+    const pinia = createPinia()
+    useTasksStore(pinia).save({ title: 'Quiet arrival', duration: 25, category: 'Work' })
+    const wrapper = mount(App, {
+      global: { plugins: [pinia], stubs: { transition: false } },
+      attachTo: document.body,
+    })
+    wrappers.push(wrapper)
+    await vi.advanceTimersByTimeAsync(800)
+    const anchor = wrapper.get('.screen-heading').element
+    const header = wrapper.get('header').element
+    wrapper.get('main').element.scrollTop = 120
+    await wrapper.get('[aria-label="Edit Quiet arrival"]').trigger('click')
+    expect(wrapper.get('.task-panel').attributes('inert')).toBeDefined()
+    await vi.advanceTimersByTimeAsync(450)
+    expect(wrapper.find('form').exists()).toBe(true)
+    expect(wrapper.get('.screen-heading').element).toBe(anchor)
+    expect(wrapper.get('header').element).toBe(header)
+    expect(wrapper.get('main').element.scrollTop).toBe(0)
+    expect(document.activeElement?.id).not.toBe('task-title')
+    await vi.advanceTimersByTimeAsync(800)
+    expect(document.activeElement?.id).toBe('task-title')
+    expect(wrapper.find('[aria-label="Remembered task suggestions"]').exists()).toBe(false)
+    await wrapper.get('#task-title').trigger('keydown', { key: 'ArrowDown' })
+    expect(wrapper.find('[aria-label="Remembered task suggestions"]').exists()).toBe(true)
+    await wrapper.get('.actions .quiet').trigger('click')
+    expect(wrapper.get('.creation').attributes('inert')).toBeDefined()
+    await vi.advanceTimersByTimeAsync(1200)
+    expect(wrapper.find('form').exists()).toBe(false)
+    expect(wrapper.get('.screen-heading').element).toBe(anchor)
+    expect(wrapper.find('[aria-label="Remembered task suggestions"]').exists()).toBe(false)
+    expect(document.activeElement?.id).toBe('list-title')
+  })
   it('skips completed tasks and retains an explicit selection', async () => {
-    const { wrapper, store, timer } = setup()
+    const { wrapper, store, timer } = await setup()
     store.save({ title: 'Done', duration: 5, category: 'Work' })
     store.save({ title: 'Next', duration: 10, category: 'Work' })
     store.save({ title: 'Chosen', duration: 15, category: 'Work' })
@@ -89,8 +286,8 @@ describe('task manager', () => {
     expect(wrapper.find('.start-focus').exists()).toBe(false)
   })
   it('validates fields inline and keeps entered values', async () => {
-    const { wrapper, store } = setup()
-    expect(wrapper.text()).toContain('Add your first task')
+    const { wrapper, store } = await setup()
+    expect(wrapper.get('#creation-title').text()).toBe('Make time for a task.')
     await wrapper.get('#task-title').setValue('   ')
     await wrapper.get('#task-duration').setValue('0')
     await wrapper.get('form').trigger('submit')
@@ -104,7 +301,7 @@ describe('task manager', () => {
     expect(document.activeElement?.id).toBe('task-duration')
   })
   it('adds, reorders, completes, reopens, edits, cancels and deletes through working controls', async () => {
-    const { wrapper, store } = setup()
+    const { wrapper, store } = await setup()
     await wrapper.get('#task-title').setValue('First')
     await wrapper.get('#task-duration').setValue('40')
     await wrapper.get('#task-category').trigger('click')

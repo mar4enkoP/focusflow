@@ -69,8 +69,8 @@ const display = computed(() => {
 .focus {
   text-align: center;
   width: 100%;
-  align-self: flex-start;
-  padding-top: clamp(64px, 22vh, 240px);
+  margin: 0 auto;
+  padding-top: 0;
 }
 .task-title,
 .planned {
@@ -135,9 +135,6 @@ const display = computed(() => {
   color: var(--muted);
 }
 @media (max-height: 600px) {
-  .focus {
-    padding-top: 12px;
-  }
   .countdown {
     font-size: 72px;
   }

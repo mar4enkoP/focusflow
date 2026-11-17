@@ -1,6 +1,6 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { useWorkspaceAccessStore } from '@/stores/workspaceAccess'
-import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { categories, priorities, validateTask, type Task, type TaskInput } from '@/stores/tasks'
 import AppIcon from './AppIcon.vue'
 import FloatingMenu from './FloatingMenu.vue'
@@ -9,8 +9,49 @@ import { normalizeTitle, useTaskMemoryStore, type TaskMemoryEntry } from '@/stor
 import { useFocusHistoryStore } from '@/stores/focusHistory'
 import { estimateDuration } from '@/estimation'
 const access = useWorkspaceAccessStore()
-const props = defineProps<{ task?: Task }>()
-const emit = defineEmits<{ save: [input: TaskInput]; cancel: [] }>()
+const props = defineProps<{ task?: Task; welcome?: boolean }>()
+const compact = ref(!!props.welcome && !props.task)
+const revealing = ref(false)
+let revealTimer: ReturnType<typeof setTimeout> | undefined
+let welcomeErrorTimer: ReturnType<typeof setTimeout> | undefined
+onUnmounted(() => {
+  clearTimeout(revealTimer)
+  clearTimeout(welcomeErrorTimer)
+})
+function dismissWelcomeError() {
+  clearTimeout(welcomeErrorTimer)
+  welcomeErrorTimer = undefined
+  errors.value.title = ''
+}
+async function finishReveal() {
+  revealing.value = false
+  await nextTick()
+  durationField.value?.focus({ preventScroll: true })
+  durationField.value?.select()
+}
+async function reveal() {
+  clearTimeout(welcomeErrorTimer)
+  errors.value.title = validateTask(input).title
+  if (errors.value.title) {
+    welcomeErrorTimer = setTimeout(dismissWelcomeError, 2500)
+    return
+  }
+  compact.value = false
+  emit('expand')
+
+  revealing.value = true
+  await nextTick()
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) finishReveal()
+  else revealTimer = setTimeout(finishReveal, 1000)
+}
+function titleKey(event: KeyboardEvent) {
+  if (event.key !== 'Enter' || event.defaultPrevented) return
+  if (compact.value || revealing.value) {
+    event.preventDefault()
+    if (!event.isComposing && !event.repeat && compact.value && access.canEdit) void reveal()
+  }
+}
+const emit = defineEmits<{ save: [input: TaskInput]; cancel: []; expand: [] }>()
 const input = reactive<TaskInput>({
   title: props.task?.title ?? '',
   duration: props.task?.duration ?? 25,
@@ -18,6 +59,12 @@ const input = reactive<TaskInput>({
   priority: props.task?.priority ?? 'Medium',
 })
 const errors = ref({ title: '', duration: '', category: '', priority: '' })
+watch(
+  () => input.title,
+  (title) => {
+    if (compact.value && title.trim()) dismissWelcomeError()
+  },
+)
 const titleField = ref<InstanceType<typeof TaskTitleInput>>()
 const memory = useTaskMemoryStore()
 const history = useFocusHistoryStore()
@@ -91,9 +138,19 @@ function outsideCategory(event: PointerEvent) {
 }
 onMounted(() => document.addEventListener('pointerdown', outsideCategory))
 onUnmounted(() => document.removeEventListener('pointerdown', outsideCategory))
-onMounted(() => titleField.value?.focus())
+defineExpose({
+  focusTitle: () => titleField.value?.focus({ suggestions: false }),
+  closeMenus: () => {
+    closeCategory()
+    titleField.value?.close()
+  },
+})
 async function submit() {
-  if (!access.canEdit) return
+  if (!access.canEdit || revealing.value) return
+  if (compact.value) {
+    await reveal()
+    return
+  }
   errors.value = validateTask(input)
   if (Object.values(errors.value).some(Boolean)) {
     await nextTick()
@@ -105,120 +162,346 @@ async function submit() {
 }
 </script>
 <template>
-  <form novalidate @submit.prevent="submit" @keydown.esc.prevent="emit('cancel')">
-    <TaskTitleInput
-      ref="titleField"
-      v-model="input.title"
-      :category="input.category"
-      :error="errors.title"
-      @reuse="reuse"
-    />
-    <div class="details">
-      <div>
-        <label for="task-duration">Estimated minutes</label>
-        <div class="field duration-field">
-          <AppIcon name="clock" /><input
-            :disabled="!access.canEdit"
-            id="task-duration"
-            ref="durationField"
-            v-model.number="input.duration"
-            @input="durationEdited = true"
-            type="number"
-            min="1"
-            max="1440"
-            step="1"
-            :aria-invalid="!!errors.duration"
-            :aria-describedby="errors.duration ? 'duration-error' : undefined"
-          /><span class="duration-unit" aria-hidden="true">min</span>
-        </div>
-      </div>
-      <div>
-        <label for="task-category">Category</label>
-        <div
-          ref="categoryRoot"
-          class="category-picker"
-          @focusout="!categoryRoot?.contains($event.relatedTarget as Node) && closeCategory()"
-        >
-          <button
-            :disabled="!access.canEdit"
-            id="task-category"
-            ref="categoryButton"
-            type="button"
-            class="field category-trigger"
-            aria-label="Category"
-            aria-haspopup="listbox"
-            :aria-expanded="categoryOpen"
-            aria-controls="category-options"
-            @click="categoryOpen ? closeCategory() : openCategory()"
-            @keydown.down.prevent="openCategory()"
-            @keydown.up.prevent="openCategory()"
-          >
-            <AppIcon :name="input.category" /><span>{{ input.category }}</span
-            ><AppIcon name="down" />
-          </button>
-          <Transition name="panel">
-            <FloatingMenu
-              v-if="categoryOpen"
-              placement="below"
-              id="category-options"
-              class="category-options"
-              role="listbox"
-              aria-label="Task category"
-              @keydown="categoryKey"
-            >
-              <button
-                :disabled="!access.canEdit"
-                v-for="(category, index) in categories"
-                :key="category"
-                type="button"
-                role="option"
-                :aria-selected="input.category === category"
-                :tabindex="categoryIndex === index ? 0 : -1"
-                @click="chooseCategory(index)"
-              >
-                <AppIcon :name="category" /><span>{{ category }}</span>
-                <span v-if="input.category === category" class="selected-mark" aria-hidden="true"
-                  >&#10003;</span
-                >
-              </button>
-            </FloatingMenu>
-          </Transition>
-        </div>
-      </div>
+  <form
+    class="task-form"
+    :class="{ 'welcome-form': welcome, 'is-compact': compact }"
+    novalidate
+    @submit.prevent="submit"
+    @keydown.esc.prevent="!welcome && emit('cancel')"
+  >
+    <div class="title-stage" @keydown="titleKey">
+      <TaskTitleInput
+        ref="titleField"
+        v-model="input.title"
+        :category="input.category"
+        :error="errors.title"
+        :minimal="compact"
+        :hint-id="compact ? 'welcome-hint' : undefined"
+        @reuse="reuse"
+      />
+      <p
+        v-if="compact"
+        id="welcome-hint"
+        class="welcome-hint"
+        data-form-part
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        <Transition name="hint" mode="out-in">
+          <span v-if="errors.title" key="error" class="welcome-error">{{
+            errors.title.replace(/\.$/, '')
+          }}</span>
+          <span v-else key="guidance" class="welcome-guidance">
+            Type a task name, then press
+            <kbd aria-label="Enter"><span>Enter</span><span aria-hidden="true">↵</span></kbd>
+          </span>
+        </Transition>
+      </p>
     </div>
-    <p v-if="errors.duration" id="duration-error" class="error">{{ errors.duration }}</p>
-    <p v-if="estimate?.learned" class="estimate-help">
-      Suggested: {{ estimate.minutes }} min · Based on {{ estimate.count }} completed sessions.
-      <button :disabled="!access.canEdit" type="button" class="quiet" @click="applyEstimate">
-        Use estimate
-      </button>
-    </p>
-    <p v-if="errors.category" class="error">{{ errors.category }}</p>
-    <fieldset class="priority-picker">
-      <legend>Priority</legend>
-      <div class="priority-options">
-        <label v-for="priority in priorities" :key="priority">
-          <input
-            :disabled="!access.canEdit"
-            v-model="input.priority"
-            type="radio"
-            name="priority"
-            :value="priority"
-          />
-          <span>{{ priority }}</span>
-        </label>
+    <div
+      class="form-remainder"
+      :inert="compact || revealing ? true : undefined"
+      :aria-hidden="compact || undefined"
+    >
+      <div class="details">
+        <div>
+          <label for="task-duration" data-form-part>Estimated minutes</label>
+          <div class="field duration-field" data-form-part>
+            <AppIcon name="clock" /><input
+              :disabled="!access.canEdit"
+              id="task-duration"
+              ref="durationField"
+              v-model.number="input.duration"
+              @input="durationEdited = true"
+              type="number"
+              min="1"
+              max="1440"
+              step="1"
+              :aria-invalid="!!errors.duration"
+              :aria-describedby="errors.duration ? 'duration-error' : undefined"
+            /><span class="duration-unit" aria-hidden="true">min</span>
+          </div>
+        </div>
+        <div>
+          <label for="task-category" data-form-part>Category</label>
+          <div
+            ref="categoryRoot"
+            class="category-picker"
+            @focusout="!categoryRoot?.contains($event.relatedTarget as Node) && closeCategory()"
+          >
+            <button
+              :disabled="!access.canEdit"
+              id="task-category"
+              ref="categoryButton"
+              type="button"
+              class="field category-trigger"
+              data-form-part
+              aria-label="Category"
+              aria-haspopup="listbox"
+              :aria-expanded="categoryOpen"
+              aria-controls="category-options"
+              @click="categoryOpen ? closeCategory() : openCategory()"
+              @keydown.down.prevent="openCategory()"
+              @keydown.up.prevent="openCategory()"
+            >
+              <AppIcon :name="input.category" /><span>{{ input.category }}</span
+              ><AppIcon name="down" />
+            </button>
+            <Transition name="panel">
+              <FloatingMenu
+                v-if="categoryOpen"
+                placement="below"
+                id="category-options"
+                class="category-options"
+                role="listbox"
+                aria-label="Task category"
+                @keydown="categoryKey"
+              >
+                <button
+                  :disabled="!access.canEdit"
+                  v-for="(category, index) in categories"
+                  :key="category"
+                  type="button"
+                  role="option"
+                  :aria-selected="input.category === category"
+                  :tabindex="categoryIndex === index ? 0 : -1"
+                  @click="chooseCategory(index)"
+                >
+                  <AppIcon :name="category" /><span>{{ category }}</span>
+                  <span v-if="input.category === category" class="selected-mark" aria-hidden="true"
+                    >&#10003;</span
+                  >
+                </button>
+              </FloatingMenu>
+            </Transition>
+          </div>
+        </div>
       </div>
-    </fieldset>
-    <p v-if="errors.priority" class="error">{{ errors.priority }}</p>
-    <div class="actions">
-      <button :disabled="!access.canEdit" type="submit" class="primary">
-        {{ task ? 'Save changes' : 'Add task' }}<AppIcon name="arrow" />
-      </button>
-      <button type="button" class="quiet" @click="emit('cancel')">Cancel</button>
+      <p v-if="errors.duration" id="duration-error" class="error" data-form-part>
+        {{ errors.duration }}
+      </p>
+      <p v-if="estimate?.learned" class="estimate-help" data-form-part>
+        Suggested: {{ estimate.minutes }} min · Based on {{ estimate.count }} completed sessions.
+        <button :disabled="!access.canEdit" type="button" class="quiet" @click="applyEstimate">
+          Use estimate
+        </button>
+      </p>
+      <p v-if="errors.category" class="error" data-form-part>{{ errors.category }}</p>
+      <fieldset class="priority-picker">
+        <legend data-form-part>Priority</legend>
+        <div class="priority-options" data-form-part>
+          <label v-for="priority in priorities" :key="priority">
+            <input
+              :disabled="!access.canEdit"
+              v-model="input.priority"
+              type="radio"
+              name="priority"
+              :value="priority"
+            />
+            <span>{{ priority }}</span>
+          </label>
+        </div>
+      </fieldset>
+      <p v-if="errors.priority" class="error" data-form-part>{{ errors.priority }}</p>
+      <div class="actions" :class="{ 'single-action': welcome }">
+        <button :disabled="!access.canEdit" type="submit" class="primary" data-form-part>
+          {{ task ? 'Save changes' : 'Add task' }}<AppIcon name="arrow" />
+        </button>
+        <button v-if="!welcome" type="button" class="quiet" data-form-part @click="emit('cancel')">
+          Cancel
+        </button>
+      </div>
+      <p v-if="welcome" class="completion-hint" data-form-part>
+        <span>Choose your details, then press</span>
+        <span class="hint-action">Add task<AppIcon name="arrow" /></span>
+      </p>
     </div>
   </form>
 </template>
 <style scoped lang="scss">
+.task-form {
+  --surface-blur: 28px;
+  --glass-fill: linear-gradient(115deg, #ffffff09, #ffffff02), rgb(18 16 20 / 10%);
+  --glass-hover: linear-gradient(115deg, #ffffff0e, #ffffff04), rgb(18 16 20 / 8%);
+  --glass-edge: #ffffff1c;
+  --glass-highlight: inset 0 1px 0 #ffffff0b, inset 0 -1px 0 #ffffff03;
+  --floating-glass-fill: linear-gradient(115deg, #ffffff09, #ffffff02), rgb(18 16 20 / 48%);
+  &.welcome-form {
+    min-height: 320px;
+  }
+  .title-stage {
+    transition: transform 650ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  &.welcome-form:not(.is-compact) {
+    .details > div {
+      --arrival-delay: 240ms;
+      &:nth-child(2) {
+        --arrival-delay: 320ms;
+      }
+    }
+    .details label,
+    .details .field {
+      animation: detail-arrive 480ms cubic-bezier(0.22, 1, 0.36, 1) var(--arrival-delay) backwards;
+    }
+    .priority-picker legend,
+    .priority-options {
+      animation: detail-arrive 480ms cubic-bezier(0.22, 1, 0.36, 1) 400ms backwards;
+    }
+    .actions > button {
+      animation: detail-arrive 480ms cubic-bezier(0.22, 1, 0.36, 1) 480ms backwards;
+    }
+    .completion-hint {
+      animation: welcome-field 850ms ease 920ms backwards;
+    }
+  }
+  .details {
+    margin-top: 20px;
+  }
+  .priority-picker {
+    margin-top: 20px;
+  }
+  .priority-options {
+    padding: 3px;
+    gap: 3px;
+    span {
+      min-height: 28px;
+      font-size: 11px;
+    }
+    input:checked + span {
+      border-color: #ffffff24;
+      background: #ffffff0a;
+      box-shadow: inset 0 1px 0 #ffffff08;
+    }
+  }
+  @media (pointer: coarse) {
+    .priority-options span {
+      min-height: 38px;
+    }
+    .actions > button {
+      height: 44px;
+    }
+  }
+  &.is-compact {
+    min-height: 184px;
+    .title-stage {
+      transform: translateY(48px);
+    }
+    // Fade the glass itself, not its ancestor: ancestor opacity creates a
+    // temporary backdrop root and changes blur sampling when the fade ends.
+    :deep(.title-field),
+    .welcome-hint {
+      animation: welcome-field 850ms ease 760ms backwards;
+    }
+    .form-remainder {
+      position: absolute;
+      inset: 0;
+      visibility: hidden;
+    }
+  }
+}
+.completion-hint {
+  margin: 16px 0 0;
+  min-height: 25px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 17px;
+}
+@keyframes detail-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.welcome-hint {
+  position: absolute;
+  top: 100%;
+  width: 100%;
+  margin: 16px 0 0;
+  min-height: 25px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+  .welcome-guidance {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .welcome-error {
+    color: #c8a59d;
+    font-weight: 400;
+    letter-spacing: 0.01em;
+  }
+  kbd > span:last-child {
+    font-size: 16px;
+  }
+}
+.welcome-hint kbd,
+.completion-hint .hint-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 8px;
+  height: 25px;
+  border-radius: 5px;
+  border: 1px solid #ffffff40;
+  background: #ffffff06;
+  color: var(--text);
+  font: 11px/1 system-ui;
+  box-shadow: inset 0 -2px 0 #ffffff0a;
+  svg {
+    width: 13px;
+    height: 13px;
+  }
+}
+.hint-enter-active,
+.hint-leave-active {
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease;
+}
+.hint-enter-from {
+  opacity: 0;
+  transform: translateY(4px);
+}
+.hint-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+@keyframes welcome-field {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .task-form .title-stage,
+  .task-form .form-remainder,
+  .task-form :deep(.title-field),
+  .task-form .welcome-hint,
+  .task-form .form-remainder *,
+  .hint-enter-active,
+  .hint-leave-active {
+    transition: none;
+    animation: none !important;
+  }
+}
 .estimate-help {
   margin: 8px 0 0;
   color: var(--muted);
@@ -229,10 +512,6 @@ async function submit() {
   }
 }
 form {
-  --glass-fill: var(--form-glass-fill);
-  --glass-hover: var(--form-glass-hover);
-  --glass-edge: var(--form-glass-edge);
-  --glass-highlight: var(--form-glass-highlight);
   position: relative;
   isolation: isolate;
   text-align: left;
@@ -256,6 +535,7 @@ form {
   border: 1px solid var(--glass-edge);
   border-radius: var(--control-radius);
   background: var(--glass-fill);
+  -webkit-backdrop-filter: blur(var(--surface-blur));
   backdrop-filter: blur(var(--surface-blur));
   box-shadow: var(--glass-highlight);
   label {
@@ -333,6 +613,7 @@ label {
   border: 1px solid var(--glass-edge);
   border-radius: var(--control-radius);
   background: var(--glass-fill);
+  -webkit-backdrop-filter: blur(var(--surface-blur));
   backdrop-filter: blur(var(--surface-blur));
   box-shadow: var(--glass-highlight);
   color: var(--muted);
@@ -421,21 +702,27 @@ select option {
 }
 .actions {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1.5fr) minmax(88px, 1fr);
   gap: 8px;
-  margin-top: 16px;
+  margin-top: 24px;
+  &.single-action {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  > button {
+    height: 38px;
+    border-radius: var(--control-radius);
+    border-color: var(--glass-edge);
+    background: var(--glass-fill);
+    -webkit-backdrop-filter: blur(var(--surface-blur));
+    backdrop-filter: blur(var(--surface-blur));
+    box-shadow: var(--glass-highlight);
+    &:hover:not(:disabled) {
+      background: var(--glass-hover);
+    }
+  }
   .primary {
     position: relative;
     width: 100%;
-    height: 36px;
-    border-radius: var(--control-radius);
-    border-color: #ffffff24;
-    background: var(--glass-fill);
-    backdrop-filter: blur(var(--surface-blur));
-    box-shadow: var(--glass-highlight);
-    &:hover {
-      background: var(--glass-hover);
-    }
     justify-content: center;
     padding-inline: 16px 40px;
     svg {
@@ -444,20 +731,10 @@ select option {
     }
   }
   .quiet {
-    height: 36px;
     min-width: 88px;
     padding-inline: 16px;
-    border-color: var(--glass-edge);
-    border-radius: var(--control-radius);
-    background: var(--glass-fill);
-    backdrop-filter: blur(var(--surface-blur));
-    box-shadow: var(--glass-highlight);
-    color: var(--muted);
+    color: var(--text);
     font-size: 12px;
-    &:hover {
-      background: var(--glass-hover);
-      color: var(--text);
-    }
   }
 }
 .error {

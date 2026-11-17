@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useTimerPulse } from './composables/useTimerPulse'
 import { useTaskDeletionStore } from './stores/taskDeletion'
 const deletion = useTaskDeletionStore()
@@ -12,11 +12,19 @@ import LegacyFocusBackdrop from '@/components/LegacyFocusBackdrop.vue'
 import { useAppearanceStore } from '@/stores/appearance'
 import FocusBackdrop from '@/components/FocusBackdrop.vue'
 import WorkspaceTools from '@/components/WorkspaceTools.vue'
+import ScreenHeading from '@/components/ScreenHeading.vue'
 import { useWorkspaceAccessStore } from '@/stores/workspaceAccess'
 import { persistenceNotice } from './persistence'
 import { useTimerStore } from '@/stores/timer'
 const appearance = useAppearanceStore()
 const access = useWorkspaceAccessStore()
+const motionPreference = window.matchMedia?.('(prefers-reduced-motion: reduce)')
+const reducedMotion = ref(motionPreference?.matches ?? false)
+function syncMotionPreference() {
+  reducedMotion.value = motionPreference?.matches ?? false
+}
+onMounted(() => motionPreference?.addEventListener('change', syncMotionPreference))
+onUnmounted(() => motionPreference?.removeEventListener('change', syncMotionPreference))
 const accessNotice = computed(() => {
   if (access.canEdit) return ''
   if (access.status === 'unsupported')
@@ -27,7 +35,34 @@ const accessNotice = computed(() => {
     return 'Read-only — waiting for workspace ownership. Close the other FocusFlow tab to edit here.'
   return 'Read-only — workspace editing is unavailable.'
 })
+// Acquiring the lock and hydrating normally take only a moment. Keep that
+// transient state quiet; genuine errors remain immediately visible.
+const showAccessNotice = ref(false)
+watch(
+  [accessNotice, () => access.status],
+  ([message, status], _, onCleanup) => {
+    showAccessNotice.value = !!message && !['idle', 'waiting', 'owner'].includes(status)
+    if (!message || showAccessNotice.value) return
+    const timeout = setTimeout(() => {
+      showAccessNotice.value = true
+    }, 400)
+    onCleanup(() => clearTimeout(timeout))
+  },
+  { immediate: true },
+)
 const timer = useTimerStore()
+// Do not mount a guessed list/form before persistence has selected the first
+// screen. A genuine read-only state can still show its disabled workspace.
+const contentReady = ref(false)
+watch(
+  [() => access.canEdit, showAccessNotice, () => access.status],
+  ([editable, noticeVisible, status]) => {
+    if (editable || (noticeVisible && !['idle', 'owner'].includes(status))) {
+      contentReady.value = true
+    }
+  },
+  { immediate: true },
+)
 const workspaceOpen = ref(false)
 const workspaceView = ref<'Planner' | 'Analytics'>()
 useTimerPulse(timer, access)
@@ -43,19 +78,64 @@ function startFocus() {
   if (task) focus(task.id)
 }
 const editing = ref<Task>()
+const welcome = ref(access.canEdit && !store.tasks.length)
+const welcomeExpanded = ref(false)
+const backdrop = ref<InstanceType<typeof FocusBackdrop>>()
+
+let startupChecked = access.canEdit
 watch(
   () => [access.canEdit, access.generation],
   () => {
+    if (access.canEdit && !startupChecked) {
+      welcome.value = !store.tasks.length
+      startupChecked = true
+    } else if (!access.canEdit) welcome.value = false
     editing.value = undefined
     workspaceOpen.value = false
     view.value = access.canEdit && !store.tasks.length ? 'form' : 'list'
   },
 )
-const heading = ref<HTMLElement>()
-const notice = ref('')
-const title = computed(() =>
-  editing.value ? 'Edit task' : store.tasks.length ? 'Add a task' : 'Add your first task',
+const heading = ref<InstanceType<typeof ScreenHeading>>()
+const screenTitle = computed(() => {
+  if (workspaceOpen.value) return workspaceView.value ?? 'Planner'
+  if (view.value === 'list') return 'Your tasks'
+  if (view.value === 'focus') return 'Time to focus.'
+  if (welcome.value)
+    return welcomeExpanded.value
+      ? 'Set up your first task.'
+      : 'A little focus.\nStart with one task.'
+  return editing.value ? 'Refine your task.' : 'Make time for a task.'
+})
+const titleId = computed(() =>
+  workspaceOpen.value
+    ? 'tool-title'
+    : view.value === 'form'
+      ? 'creation-title'
+      : view.value === 'list'
+        ? 'list-title'
+        : 'focus-title',
 )
+const taskForm = ref<InstanceType<typeof TaskForm>>()
+function expandWelcome() {
+  heading.value?.holdPosition()
+  welcomeExpanded.value = true
+}
+function panelEntering(element: Element) {
+  if (element.parentElement) element.parentElement.scrollTop = 0
+  backdrop.value?.refresh()
+}
+function panelEntered(element: Element) {
+  backdrop.value?.refresh()
+  // Do not steal focus if the user has already selected a visible control.
+  if (element.contains(document.activeElement)) return
+  if (view.value === 'list') heading.value?.focus()
+  else if (view.value === 'form') taskForm.value?.focusTitle()
+}
+function panelLeaving(element: Element) {
+  element.setAttribute('inert', '')
+  if (element.classList.contains('creation')) taskForm.value?.closeMenus()
+}
+const notice = ref('')
 function create() {
   if (!access.canEdit) return
   editing.value = undefined
@@ -66,11 +146,13 @@ function edit(task: Task) {
   editing.value = task
   view.value = 'form'
 }
-async function showList() {
+function showList() {
+  // First-task creation has no destination to dismiss to. Keep its draft and
+  // reveal state intact until a task has actually been saved.
+  if (view.value === 'form' && welcome.value && !store.tasks.length && access.canEdit) return
+  welcome.value = false
   editing.value = undefined
   view.value = 'list'
-  await nextTick()
-  heading.value?.focus()
 }
 function save(input: TaskInput) {
   if (!store.save(input, editing.value?.id)) return
@@ -79,20 +161,32 @@ function save(input: TaskInput) {
 }
 </script>
 <template>
-  <div class="app-shell" :class="{ 'is-focus': view === 'focus', 'is-creating': view === 'form' }">
-    <Transition name="theme" mode="out-in">
+  <div
+    class="app-shell"
+    :class="{
+      'is-focus': view === 'focus',
+      'is-creating': view === 'form',
+      'is-welcome-intro': welcome && !welcomeExpanded && view === 'form' && !workspaceOpen,
+      'is-welcome-expanded': welcome && welcomeExpanded && view === 'form' && !workspaceOpen,
+    }"
+  >
+    <Transition v-if="contentReady" name="theme" mode="out-in">
       <LegacyFocusBackdrop
         v-if="appearance.theme === '1'"
+        :class="{ 'light-concealed': view === 'form' && !workspaceOpen }"
         :mode="workspaceOpen ? 'workspace' : view"
         :running="timer.isFocusing"
-      />
-      <FocusBackdrop
-        v-else
-        :mode="workspaceOpen ? 'workspace' : view"
-        :running="timer.isFocusing"
-        :workspace-view="workspaceView"
       />
     </Transition>
+    <FocusBackdrop
+      v-if="contentReady"
+      :class="{ 'light-concealed': appearance.theme === '1' && (view !== 'form' || workspaceOpen) }"
+      ref="backdrop"
+      :mode="workspaceOpen ? 'workspace' : view"
+      :compact="welcome && !welcomeExpanded"
+      :running="timer.isFocusing"
+      :workspace-view="workspaceView"
+    />
     <header>
       <a
         class="brand"
@@ -102,6 +196,7 @@ function save(input: TaskInput) {
         ><AppIcon name="brand" />FocusFlow</a
       >
       <WorkspaceTools
+        anchored
         :key="access.generation + String(access.canEdit)"
         @focus="focus"
         @active="
@@ -113,31 +208,46 @@ function save(input: TaskInput) {
         @tasks="showList"
       />
     </header>
-    <p v-if="accessNotice" class="access-notice" role="status">{{ accessNotice }}</p>
+    <ScreenHeading
+      v-if="contentReady"
+      ref="heading"
+      :id="titleId"
+      :text="screenTitle"
+      :reduced-motion="reducedMotion"
+      :relocate="welcome && welcomeExpanded && view === 'form' && !workspaceOpen"
+    />
+    <p v-if="showAccessNotice && accessNotice" class="access-notice" role="status">
+      {{ accessNotice }}
+    </p>
     <main
       :class="{ 'workspace-hidden': workspaceOpen }"
       :inert="workspaceOpen ? true : undefined"
       :aria-hidden="workspaceOpen || undefined"
+      @transitionend.self="backdrop?.refresh()"
     >
       <Transition
-        name="panel"
+        v-if="contentReady"
+        name="scene"
         mode="out-in"
+        :duration="reducedMotion ? 0 : { enter: 700, leave: 360 }"
         appear
-        @after-enter="view === 'list' && heading?.focus()"
-        @before-leave="(element) => element.setAttribute('inert', '')"
+        @after-enter="panelEntered"
+        @enter="panelEntering"
+        @before-leave="panelLeaving"
       >
         <section v-if="view === 'form'" class="creation" aria-labelledby="creation-title">
-          <div class="orb" aria-hidden="true"><AppIcon :name="editing ? 'edit' : 'plus'" /></div>
-          <h1 id="creation-title">{{ title }}</h1>
-          <p class="intro">
-            Choose what you'd like to focus on,<br />and how much time to give it.
-          </p>
-          <TaskForm :key="editing?.id ?? 'new'" :task="editing" @save="save" @cancel="showList" />
+          <TaskForm
+            ref="taskForm"
+            :key="editing?.id ?? 'new'"
+            :task="editing"
+            :welcome="welcome"
+            @expand="expandWelcome"
+            @save="save"
+            @cancel="showList"
+          />
         </section>
         <FocusTimer v-else-if="view === 'focus'" />
         <section v-else class="task-panel" aria-labelledby="list-title">
-          <div class="orb" aria-hidden="true"><AppIcon name="list" /></div>
-          <h1 id="list-title" ref="heading" tabindex="-1">Your tasks</h1>
           <div class="panel-heading">
             <span class="task-count"
               >Tasks <span>{{ store.tasks.length }}</span></span
@@ -172,6 +282,7 @@ function save(input: TaskInput) {
       </Transition>
     </main>
     <footer
+      v-if="contentReady"
       :class="{ 'workspace-hidden': workspaceOpen }"
       :inert="workspaceOpen ? true : undefined"
       :aria-hidden="workspaceOpen || undefined"
@@ -218,6 +329,58 @@ function save(input: TaskInput) {
   </div>
 </template>
 <style scoped lang="scss">
+// The title is outside this transition. Move the body as one piece, and fade
+// glass surfaces directly so their backdrop sampling stays attached to the light.
+@media (prefers-reduced-motion: no-preference) {
+  .scene-enter-active {
+    transition:
+      transform var(--screen-enter) cubic-bezier(0.22, 1, 0.36, 1),
+      opacity var(--screen-enter) ease;
+  }
+  .scene-leave-active {
+    transition:
+      transform var(--screen-leave) cubic-bezier(0.55, 0, 0.8, 0.4),
+      opacity var(--screen-leave) ease;
+  }
+  .scene-enter-from {
+    transform: translateY(28px);
+  }
+  .scene-leave-to {
+    transform: translateY(36px);
+  }
+  .scene-enter-from:not(.creation),
+  .scene-leave-to:not(.creation) {
+    opacity: 0;
+  }
+  .creation.scene-enter-active :deep(.task-form:not(.welcome-form) [data-form-part]) {
+    animation: surface-arrive var(--screen-enter) ease both;
+  }
+  .creation.scene-leave-active :deep([data-form-part]) {
+    animation: surface-depart var(--screen-leave) ease both !important;
+  }
+}
+@keyframes surface-arrive {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes surface-depart {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+:deep(.focus-backdrop) {
+  transition: opacity 900ms ease;
+}
+:deep(.light-concealed) {
+  opacity: 0;
+}
 .undo-notice {
   position: fixed;
   bottom: 16px;
@@ -237,63 +400,48 @@ function save(input: TaskInput) {
   opacity: 0;
 }
 .access-notice {
-  margin: 0 24px;
+  // Never participate in the flex layout: showing or clearing a warning must
+  // not move the task form, timer, or its light source.
+  position: absolute;
+  top: 72px;
+  left: 24px;
+  right: 24px;
+  z-index: 2;
+  margin: 0;
   color: var(--muted);
   text-align: center;
   font-size: 12px;
 }
 
 .workspace-hidden {
-  // Descendants (including checked-task marks) can override visibility, but
-  // cannot escape the opacity of their containing screen.
-  opacity: 0;
   visibility: hidden;
   pointer-events: none;
+  transition: visibility 0s var(--screen-leave);
 }
 .app-shell {
   position: relative;
   isolation: isolate;
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
+  height: 100dvh;
+  min-height: 0;
   overflow: hidden;
-  &.is-creating {
-    height: 100dvh;
-    min-height: 0;
-    > header,
-    > footer {
-      flex-shrink: 0;
-    }
-    > main {
-      min-height: 0;
-      overflow-y: auto;
-      overscroll-behavior-y: contain;
-      align-items: flex-start;
-      padding-block: clamp(12px, 3vh, 32px);
-      scrollbar-width: thin;
-    }
-    .creation {
-      margin-block: auto;
-      flex-shrink: 0;
-    }
+  &.is-welcome-intro {
+    // Center the visible introduction, rather than the hidden expanded form.
+    --screen-title-top: max(calc(var(--app-header-height) + 24px), calc(50dvh - 106px));
+    --screen-content-top: calc(var(--screen-title-top) + var(--screen-title-height) + 12px);
   }
-  &.is-focus {
-    main {
-      padding-top: 0;
-    }
-    footer {
-      padding-bottom: 16px;
-      gap: 16px;
-    }
+  &.is-welcome-expanded > main {
+    // Enable repositioning only after Enter, never while startup data hydrates.
+    transition: top 650ms cubic-bezier(0.22, 1, 0.36, 1);
   }
 }
-
 header {
   position: relative;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 28px 40px;
+  height: var(--app-header-height);
+  padding: 0 40px;
+  flex-shrink: 0;
 }
 .brand {
   display: flex;
@@ -305,74 +453,51 @@ header {
   letter-spacing: -0.3px;
 }
 main {
-  position: relative;
+  position: absolute;
+  top: var(--screen-content-top);
+  bottom: var(--screen-bottom);
+  left: 0;
+  right: 0;
   isolation: isolate;
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 48px 24px 64px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior-y: contain;
+  scrollbar-width: thin;
+  padding: 0 24px 24px;
+}
+.is-creating > main {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
 }
 .creation,
 .task-panel {
   position: relative;
   isolation: isolate;
-  // Preserve the same backdrop sampling boundary during and after opacity transitions.
-  will-change: opacity;
   width: 356px;
   max-width: 100%;
+  margin: 0 auto;
   text-align: center;
-  h1 {
-    font-size: 20px;
-    line-height: 26px;
-    font-weight: 400;
-    letter-spacing: -0.4px;
-  }
 }
-.orb {
-  position: relative;
-  isolation: isolate;
-  width: 76px;
-  height: 76px;
-  border-radius: 50%;
-  margin: 0 auto 16px;
-  display: grid;
-  place-items: center;
-  background: radial-gradient(circle at 47% 45%, #171519, #0c0b0e 72%);
-  box-shadow:
-    inset 0 0 0 1px #ffffff0c,
-    0 8px 18px #0003;
-  &::after {
-    content: '';
-    position: absolute;
-    inset: 9px;
-    border: 1px solid #ffffff04;
-    border-radius: inherit;
-    box-shadow: inset 0 0 8px #0008;
-    pointer-events: none;
-  }
-  svg {
-    width: 24px;
-    height: 24px;
-  }
+main > section {
+  transition:
+    transform var(--screen-enter) var(--motion-ease),
+    opacity var(--screen-enter) ease;
 }
-.eyebrow {
-  font-size: 9px;
-  letter-spacing: 2px;
-  color: var(--muted);
-  margin: 0 0 12px;
+main.workspace-hidden > section {
+  transform: translateY(36px);
+  transition-duration: var(--screen-leave);
 }
-h1 {
-  font-size: 26px;
-  font-weight: 450;
-  letter-spacing: -0.6px;
-  margin: 0;
+main.workspace-hidden > section:not(.creation) {
+  opacity: 0;
 }
-.intro {
-  color: var(--muted);
-  line-height: 18px;
-  font-size: 13px;
-  margin: 8px 0 24px;
+main :deep([data-form-part]) {
+  transition: opacity var(--screen-enter) ease;
+}
+main.workspace-hidden :deep([data-form-part]) {
+  opacity: 0;
+  transition-duration: var(--screen-leave);
 }
 .empty {
   text-align: center;
@@ -389,7 +514,12 @@ h1 {
   }
 }
 footer {
-  padding: 0 24px 24px;
+  position: absolute;
+  bottom: 16px;
+  left: 0;
+  right: 0;
+  padding: 0 24px;
+  transition: opacity var(--screen-leave) ease;
   display: flex;
   align-items: center;
   flex-direction: column;
@@ -416,25 +546,14 @@ footer {
 }
 @media (max-width: 600px) {
   header {
-    padding: 24px;
+    padding-inline: 24px;
   }
   main {
-    padding: 28px 16px 40px;
-  }
-  h1 {
-    font-size: 20px;
+    padding-inline: 16px;
   }
 }
-@media (max-height: 700px) {
-  main {
-    padding-top: 24px;
-    padding-bottom: 32px;
-  }
-  .orb {
-    margin-bottom: 20px;
-    width: 48px;
-    height: 48px;
-  }
+footer.workspace-hidden {
+  opacity: 0;
 }
 .focus-dock {
   width: 380px;
@@ -505,6 +624,8 @@ progress {
 }
 
 .task-panel {
+  // Preserve the list's sampling boundary during its opacity transition.
+  will-change: opacity;
   width: 420px;
   max-width: 100%;
 }
@@ -512,7 +633,7 @@ progress {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin: 20px 0 12px;
+  margin: 0 0 12px;
   .task-count {
     color: var(--muted);
     font-size: 11px;
@@ -550,42 +671,6 @@ progress {
   svg {
     position: absolute;
     right: 16px;
-  }
-}
-
-@media (max-height: 700px) {
-  .app-shell.is-creating {
-    > header {
-      padding-block: 16px;
-    }
-    > footer {
-      padding-bottom: 12px;
-      gap: 8px;
-    }
-    .orb {
-      width: 40px;
-      height: 40px;
-      margin-bottom: 10px;
-    }
-    .intro {
-      margin-bottom: 16px;
-    }
-  }
-}
-@media (max-height: 560px) {
-  .app-shell.is-creating {
-    .orb {
-      display: none;
-    }
-    .intro {
-      margin: 4px 0 12px;
-    }
-    > main {
-      padding-block: 8px;
-    }
-    > header {
-      padding-block: 12px;
-    }
   }
 }
 </style>

@@ -6,6 +6,7 @@ import SessionPlanner from './SessionPlanner.vue'
 import ProductivityAnalytics from './ProductivityAnalytics.vue'
 import { usePlannerStore } from '@/stores/planner'
 import { useTasksStore } from '@/stores/tasks'
+defineProps<{ anchored?: boolean }>()
 const planner = usePlannerStore()
 const tasks = useTasksStore()
 const emit = defineEmits<{
@@ -23,6 +24,11 @@ const dialog = ref<HTMLElement>()
 const navigation = ref<HTMLElement>()
 const supportsPopover = typeof HTMLElement !== 'undefined' && 'showPopover' in HTMLElement.prototype
 let opener: HTMLElement | undefined
+function focusDialog(element: Element) {
+  if (!element.contains(document.activeElement)) {
+    element.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true })
+  }
+}
 async function open(panel: 'Planner' | 'Analytics' | 'Theme', event: MouseEvent) {
   opener = event.currentTarget as HTMLElement
   if (opened.value === panel) {
@@ -35,7 +41,6 @@ async function open(panel: 'Planner' | 'Analytics' | 'Theme', event: MouseEvent)
   dialog.value?.querySelector<HTMLButtonElement>('button')?.focus()
 }
 function close() {
-  dialog.value?.hidePopover?.()
   opened.value = undefined
   opener?.focus()
 }
@@ -46,7 +51,6 @@ function outside(event: PointerEvent) {
     navigation.value?.contains(event.target as Node)
   )
     return
-  dialog.value?.hidePopover?.()
   opened.value = undefined
 }
 function escape(event: KeyboardEvent) {
@@ -107,51 +111,66 @@ function showTasks() {
       <AppIcon name="layers" /><span>Тема</span>
     </button>
   </nav>
-  <div
-    v-if="opened"
-    ref="dialog"
-    class="workspace-panel"
-    :class="{ 'theme-panel': opened === 'Theme' }"
-    role="dialog"
-    aria-modal="false"
-    :popover="supportsPopover ? 'manual' : undefined"
-    aria-labelledby="tool-title"
-    @keydown.esc.prevent.stop="close"
+  <Transition
+    name="workspace-screen"
+    mode="out-in"
+    @enter="(element) => (element as HTMLElement).showPopover?.()"
+    @after-enter="focusDialog"
+    @before-leave="(element) => element.setAttribute('inert', '')"
   >
-    <div class="panel-content">
-      <div class="heading">
-        <h2 id="tool-title">
-          <AppIcon
-            :name="opened === 'Planner' ? 'list' : opened === 'Theme' ? 'layers' : 'chart'"
-          />{{ opened === 'Theme' ? 'Тема' : opened }}
-        </h2>
-        <button
-          type="button"
-          :aria-label="opened === 'Theme' ? 'Закрыть тему' : `Close ${opened}`"
-          @click="close"
-        >
-          <AppIcon name="close" />
-        </button>
-      </div>
-      <SessionPlanner v-if="opened === 'Planner'" @focus="focus" />
-      <ProductivityAnalytics v-else-if="opened === 'Analytics'" />
-      <ThemeSettings v-else />
-    </div>
-    <button
-      v-if="opened !== 'Theme'"
-      class="workspace-dock"
-      type="button"
-      aria-label="Open task list"
-      @click="showTasks"
+    <div
+      v-if="opened"
+      :key="opened"
+      ref="dialog"
+      class="workspace-panel"
+      :class="{
+        'theme-panel': opened === 'Theme',
+        'anchored-panel': anchored && opened !== 'Theme',
+      }"
+      role="dialog"
+      aria-modal="false"
+      :popover="supportsPopover ? 'manual' : undefined"
+      :aria-labelledby="anchored && opened !== 'Theme' ? 'workspace-dialog-title' : 'tool-title'"
+      @keydown.esc.prevent.stop="close"
     >
-      <span class="dock-count"
-        ><strong>{{ tasks.remaining }}</strong> {{ tasks.remaining === 1 ? 'task' : 'tasks' }} to
-        do</span
+      <div class="panel-content">
+        <div class="heading">
+          <h2
+            :id="anchored && opened !== 'Theme' ? 'workspace-dialog-title' : 'tool-title'"
+            :class="{ 'sr-only': anchored && opened !== 'Theme' }"
+          >
+            <AppIcon
+              :name="opened === 'Planner' ? 'list' : opened === 'Theme' ? 'layers' : 'chart'"
+            />{{ opened === 'Theme' ? 'Тема' : opened }}
+          </h2>
+          <button
+            type="button"
+            :aria-label="opened === 'Theme' ? 'Закрыть тему' : `Close ${opened}`"
+            @click="close"
+          >
+            <AppIcon name="close" />
+          </button>
+        </div>
+        <SessionPlanner v-if="opened === 'Planner'" @focus="focus" />
+        <ProductivityAnalytics v-else-if="opened === 'Analytics'" />
+        <ThemeSettings v-else />
+      </div>
+      <button
+        v-if="opened !== 'Theme'"
+        class="workspace-dock"
+        type="button"
+        aria-label="Open task list"
+        @click="showTasks"
       >
-      <span class="dock-time">{{ tasks.totalMinutes }} min</span>
-      <AppIcon name="arrow" />
-    </button>
-  </div>
+        <span class="dock-count"
+          ><strong>{{ tasks.remaining }}</strong> {{ tasks.remaining === 1 ? 'task' : 'tasks' }} to
+          do</span
+        >
+        <span class="dock-time">{{ tasks.totalMinutes }} min</span>
+        <AppIcon name="arrow" />
+      </button>
+    </div>
+  </Transition>
 </template>
 <style scoped lang="scss">
 nav button.theme-trigger {
@@ -221,7 +240,37 @@ nav {
   padding: 0;
   border: 0;
   background: transparent;
-  animation: reveal 180ms var(--motion-ease);
+}
+.workspace-panel.anchored-panel {
+  top: var(--screen-content-top);
+  bottom: auto;
+  height: calc(100dvh - var(--screen-content-top) - var(--screen-bottom));
+  max-height: none;
+  .heading {
+    justify-content: flex-end;
+  }
+}
+.workspace-screen-enter-active {
+  transition: transform var(--screen-enter) var(--motion-ease);
+  .panel-content,
+  .workspace-dock {
+    transition: opacity var(--screen-enter) ease;
+  }
+}
+.workspace-screen-leave-active {
+  transition: transform var(--screen-leave) cubic-bezier(0.55, 0, 0.8, 0.4);
+  .panel-content,
+  .workspace-dock {
+    transition: opacity var(--screen-leave) ease;
+  }
+}
+.workspace-screen-enter-from,
+.workspace-screen-leave-to {
+  transform: translateY(32px);
+  .panel-content,
+  .workspace-dock {
+    opacity: 0;
+  }
 }
 .panel-content {
   height: 100%;
@@ -310,14 +359,6 @@ nav {
     border-color: transparent;
     background: transparent;
     color: var(--muted);
-  }
-}
-@keyframes reveal {
-  from {
-    transform: translateY(6px);
-  }
-  to {
-    transform: translateY(0);
   }
 }
 @media (max-width: 480px) {

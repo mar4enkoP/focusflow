@@ -7,6 +7,7 @@ const props = withDefaults(
     mode?: 'focus' | 'list' | 'form' | 'workspace'
     running?: boolean
     workspaceView?: 'Planner' | 'Analytics'
+    compact?: boolean
   }>(),
   { mode: 'focus', running: false },
 )
@@ -23,6 +24,8 @@ type Light = {
   depth: number
   concentration: number
   radiance: number
+  form: number
+  opening: number
 }
 const light = ref<Light>({
   x: 0,
@@ -34,6 +37,8 @@ const light = ref<Light>({
   depth: 160,
   concentration: 0,
   radiance: 0,
+  form: 0,
+  opening: 0,
 })
 let frame = 0
 let settle: ReturnType<typeof setTimeout> | undefined
@@ -43,6 +48,8 @@ let target: Light = { ...light.value }
 let interaction: HTMLElement | undefined
 let observedPanel: Element | undefined
 let layoutFrame = 0
+const passage = ref(1)
+let passageStart = -Infinity
 const velocity = Object.fromEntries(Object.keys(light.value).map((key) => [key, 0])) as Light
 function stopMotion() {
   cancelAnimationFrame(frame)
@@ -61,6 +68,7 @@ function move(destination: Light) {
   if (motion?.matches) {
     stopMotion()
     light.value = { ...destination }
+    passage.value = 1
     return
   }
   // First appearance fades in at its anchor instead of flying from the viewport corner.
@@ -75,8 +83,9 @@ function move(destination: Light) {
       const next = advanceLight(state[key], velocity[key], destination[key], seconds)
       state[key] = next.value
       velocity[key] = next.velocity
-      const tolerance =
-        key === 'power' || key === 'concentration' || key === 'radiance' ? 0.001 : 0.05
+      const tolerance = ['power', 'concentration', 'radiance', 'form', 'opening'].includes(key)
+        ? 0.001
+        : 0.05
       if (
         Math.abs(next.value - destination[key]) > tolerance ||
         Math.abs(next.velocity) > tolerance
@@ -84,7 +93,8 @@ function move(destination: Light) {
         settled = false
     }
     light.value = settled ? { ...destination } : state
-    if (!settled) frame = requestAnimationFrame(animate)
+    passage.value = Math.min(1, (now - passageStart) / 1400)
+    if (!settled || passage.value < 1) frame = requestAnimationFrame(animate)
     else stopMotion()
   }
   frame = requestAnimationFrame(animate)
@@ -97,7 +107,7 @@ function locate() {
   const w = bounds.width
   const h = bounds.height
   const selector = {
-    form: '.creation',
+    form: '.creation form',
     list: '.task-panel',
     workspace: '.workspace-panel',
     focus: '.focus',
@@ -114,7 +124,7 @@ function locate() {
   const cx = panel ? panel.left + panel.width / 2 - bounds.left : w / 2
   const cy = panel ? panel.top + panel.height / 2 - bounds.top : h / 2
   const compact = w < 600
-  let pose: Omit<Light, 'concentration' | 'radiance'>
+  let pose: Omit<Light, 'concentration' | 'radiance' | 'form' | 'opening'>
   const bottom = panel ? panel.bottom - bounds.top : h * 0.72
   if (props.mode === 'focus') {
     // The light is a landscape behind the interface, not an object fitted into
@@ -152,14 +162,37 @@ function locate() {
           power: 0.65,
         }
   } else if (props.mode === 'form') {
+    // Measure the resting form position, not its transient slide-in translation.
+    // Otherwise the first fade starts too low and the next layout read lifts it.
+    const scene = element.closest('.creation')
+    const transform = scene ? getComputedStyle(scene).transform : 'none'
+    const slideY = transform && transform !== 'none' ? new DOMMatrixReadOnly(transform).m42 : 0
+    // Match the approved welcome bow in viewport coordinates. Both forms and
+    // the list now keep this same source alive across panel transitions.
+    const opening = props.compact ? 0 : 1
+    const scale = (580 / 600) * (1 + opening * 0.04)
+    const welcomeCurve = props.compact ? 24 : 0
+    // Raise the shoulders while keeping the lower light near the title field.
+    const anchor = (110 - opening * 45 - 150 - welcomeCurve) * scale
+    const angle = (-12 * Math.PI) / 180
+    // In the compact scene, place the crescent between the heading and field;
+    // its lower bloom overlaps the glass rather than sitting below the input.
+    const compactLift = props.compact ? 48 : 0
     pose = {
-      x: cx - Math.min(w * 0.34, (panel?.width ?? 356) / 2 + 35),
-      y: cy + 45,
-      width: Math.min((panel?.height ?? 400) * 0.78, 350),
-      bend: 0,
-      depth: 210,
-      angle: 90,
-      power: 0.64,
+      x: cx - Math.sin(angle) * anchor,
+      y:
+        panel.top -
+        slideY -
+        bounds.top +
+        70 -
+        compactLift +
+        opening * 110 +
+        Math.cos(angle) * anchor,
+      width: (550 - (props.compact ? 30 : 0) + opening * 30) * scale,
+      bend: (110 + welcomeCurve + opening * 65) * scale,
+      depth: (160 - opening * 15) * scale,
+      angle: -12,
+      power: 1,
     }
   } else {
     pose = {
@@ -174,6 +207,8 @@ function locate() {
   }
   const destination: Light = {
     ...pose,
+    form: props.mode === 'form' ? 1 : 0,
+    opening: props.compact ? 0 : 1,
     radiance: props.mode === 'focus' ? 1 : props.workspaceView === 'Analytics' ? 0.45 : 0,
     concentration:
       props.mode === 'list'
@@ -189,6 +224,7 @@ function locate() {
     panel &&
     interaction.closest(selector) &&
     props.mode !== 'focus' &&
+    props.mode !== 'form' &&
     props.workspaceView !== 'Analytics'
   ) {
     const rect = interaction.getBoundingClientRect()
@@ -197,9 +233,8 @@ function locate() {
       Math.min(65, (rect.top + rect.height / 2 - bounds.top - cy) * 0.35),
     )
     destination.depth *= 0.9
-    if (props.mode === 'form') destination.width *= 0.88
   }
-  if (compact && props.mode !== 'focus') {
+  if (compact && props.mode !== 'focus' && props.mode !== 'form') {
     destination.width = Math.min(destination.width, w * 0.85)
     destination.depth *= 0.75
     destination.bend *= 0.8
@@ -228,12 +263,15 @@ function motionChanged() {
   if (motion?.matches) {
     stopMotion()
     light.value = { ...target }
+    passage.value = 1
   }
 }
 watch(
-  () => [props.mode, props.running, props.workspaceView],
+  () => [props.mode, props.running, props.workspaceView, props.compact],
   () => {
     interaction = undefined
+    passageStart = performance.now()
+    passage.value = motion?.matches ? 1 : 0
     schedule()
   },
 )
@@ -247,9 +285,13 @@ onMounted(() => {
   if (typeof ResizeObserver !== 'undefined' && root.value?.parentElement) {
     observer = new ResizeObserver(relayout)
     observer.observe(root.value.parentElement)
+    // The centered welcome step changes the content area's top as it expands.
+    const content = root.value.parentElement.querySelector('main')
+    if (content) observer.observe(content)
   }
   schedule()
 })
+defineExpose({ refresh: schedule })
 onBeforeUnmount(() => {
   cancelAnimationFrame(frame)
   clearTimeout(settle)
@@ -264,12 +306,16 @@ onBeforeUnmount(() => {
 // A single luminous aperture: its lower lip stays crisp while light diffuses inward.
 // Cubic control points interpolate continuously between a slit, crescent and oval.
 const geometry = computed(() => {
-  const { width, bend, depth } = light.value
+  const { width, bend, depth, form, opening } = light.value
   const r = width / 2
-  const lip = `M ${-r} 0 C ${-r} ${bend * 0.55} ${-r * 0.55} ${bend} 0 ${bend} C ${r * 0.55} ${bend} ${r} ${bend * 0.55} ${r} 0`
+  const lower = 0.55 + form * ((60 + opening * 30) / (110 + opening * 65) - 0.55)
+  const shoulder = 0.55 + form * ((150 + opening * 10) / (275 + opening * 15) - 0.55)
+  const upper = 0.7 + form * ((90 - opening * 10) / (160 - opening * 15) - 0.7)
+  const ripple = Math.sin(Math.PI * passage.value) ** 2 * 10
+  const lip = `M ${-r} 0 C ${-r} ${bend * lower - ripple} ${-r * shoulder} ${bend - ripple} 0 ${bend} C ${r * shoulder} ${bend + ripple} ${r} ${bend * lower + ripple} ${r} 0`
   return {
     lip,
-    body: `${lip} C ${r} ${-depth * 0.7} ${r * 0.55} ${-depth} 0 ${-depth} C ${-r * 0.55} ${-depth} ${-r} ${-depth * 0.7} ${-r} 0 Z`,
+    body: `${lip} C ${r} ${-depth * upper} ${r * shoulder} ${-depth} 0 ${-depth} C ${-r * shoulder} ${-depth} ${-r} ${-depth * upper} ${-r} 0 Z`,
   }
 })
 </script>
@@ -284,6 +330,66 @@ const geometry = computed(() => {
   >
     <svg class="light-field" width="100%" height="100%">
       <defs>
+        <linearGradient
+          :id="`${id}-form-volume`"
+          gradientUnits="userSpaceOnUse"
+          x1="0"
+          :y1="-light.depth"
+          x2="0"
+          :y2="light.bend"
+        >
+          <stop offset="0" stop-color="#a51d08" stop-opacity="0" />
+          <stop offset=".6" stop-color="#ef3e0c" stop-opacity=".04" />
+          <stop offset=".84" stop-color="#f64409" stop-opacity=".18" />
+          <stop offset=".95" stop-color="#ff8217" stop-opacity=".5" />
+          <stop
+            offset="1"
+            :stop-color="`rgb(255 ${233 - light.opening * 41} ${172 - light.opening * 32})`"
+            stop-opacity=".7"
+          />
+        </linearGradient>
+        <linearGradient :id="`${id}-form-rim`">
+          <stop offset="0" stop-color="#ff761c" stop-opacity="0" />
+          <stop
+            offset=".52"
+            :stop-color="`rgb(255 ${231 - light.opening * 43} ${165 - light.opening * 28})`"
+            :stop-opacity="0.65 - light.opening * 0.1"
+          />
+          <stop offset="1" stop-color="#ff6017" stop-opacity="0" />
+        </linearGradient>
+        <linearGradient :id="`${id}-form-fade`">
+          <stop offset="0" stop-color="white" stop-opacity="0" />
+          <stop offset=".25" stop-color="white" />
+          <stop offset=".75" stop-color="white" />
+          <stop offset="1" stop-color="white" stop-opacity="0" />
+        </linearGradient>
+        <mask
+          :id="`${id}-form-mask`"
+          maskUnits="userSpaceOnUse"
+          :x="-light.width"
+          :y="-light.depth - 180"
+          :width="light.width * 2"
+          :height="light.depth + light.bend + 360"
+        >
+          <rect
+            :x="-light.width * 0.55"
+            :y="-light.depth - 180"
+            :width="light.width * 1.1"
+            :height="light.depth + light.bend + 360"
+            :fill="`url(#${id}-form-fade)`"
+          />
+        </mask>
+        <radialGradient
+          :id="`${id}-passage`"
+          gradientUnits="userSpaceOnUse"
+          :cx="light.width * (passage - 0.5)"
+          :cy="light.bend * 0.9"
+          :r="light.width * 0.25"
+        >
+          <stop offset="0" stop-color="#ffd6a4" stop-opacity=".8" />
+          <stop offset=".35" stop-color="#ff934a" stop-opacity=".4" />
+          <stop offset="1" stop-color="#ef541b" stop-opacity="0" />
+        </radialGradient>
         <linearGradient
           :id="`${id}-volume`"
           gradientUnits="userSpaceOnUse"
@@ -380,39 +486,79 @@ const geometry = computed(() => {
         :transform="`translate(${light.x} ${light.y}) rotate(${light.angle})`"
         :opacity="light.power"
       >
-        <!-- The air, bloom and aperture all emit from the same filled shape. -->
-        <path
-          :d="geometry.body"
-          :fill="`url(#${id}-air-color)`"
-          :filter="`url(#${id}-air)`"
-          :opacity="0.52 + light.radiance * 0.23"
-        />
-        <path
-          :d="geometry.body"
-          :fill="`url(#${id}-volume)`"
-          :filter="`url(#${id}-bloom)`"
-          opacity=".45"
-        />
-        <g :clip-path="`url(#${id}-aperture)`" :mask="`url(#${id}-falloff)`">
-          <path :d="geometry.body" :fill="`url(#${id}-volume)`" :filter="`url(#${id}-soft)`" />
+        <g v-if="light.form > 0" :opacity="light.form" :mask="`url(#${id}-form-mask)`">
+          <path
+            :d="geometry.body"
+            :fill="`url(#${id}-form-volume)`"
+            style="filter: blur(40px)"
+            :opacity="0.55 + light.opening * 0.13"
+          />
+          <path
+            :d="geometry.body"
+            :fill="`url(#${id}-form-volume)`"
+            :style="{ filter: `blur(${9 - light.opening}px)` }"
+            :opacity="0.7 + light.opening * 0.2"
+          />
+          <path
+            :d="geometry.lip"
+            fill="none"
+            :stroke="`url(#${id}-form-rim)`"
+            :stroke-width="1 + light.opening"
+            :style="{ filter: `blur(${2 + light.opening * 0.5}px)` }"
+            :opacity="0.4 + light.opening * 0.15"
+          />
         </g>
-        <!-- A soft caustic follows the same aperture edge, giving the wide
+        <g v-if="light.form < 1" :opacity="1 - light.form">
+          <!-- The air, bloom and aperture all emit from the same filled shape. -->
+          <path
+            :d="geometry.body"
+            :fill="`url(#${id}-air-color)`"
+            :filter="`url(#${id}-air)`"
+            :opacity="0.52 + light.radiance * 0.23"
+          />
+          <path
+            :d="geometry.body"
+            :fill="`url(#${id}-volume)`"
+            :filter="`url(#${id}-bloom)`"
+            opacity=".45"
+          />
+          <g :clip-path="`url(#${id}-aperture)`" :mask="`url(#${id}-falloff)`">
+            <path :d="geometry.body" :fill="`url(#${id}-volume)`" :filter="`url(#${id}-soft)`" />
+          </g>
+          <!-- A soft caustic follows the same aperture edge, giving the wide
              focus source a luminous lip without introducing another light. -->
-        <path
-          :d="geometry.lip"
-          fill="none"
-          :stroke="`url(#${id}-rim)`"
-          :filter="`url(#${id}-edge)`"
-          stroke-width="5"
-          :opacity="light.radiance * 0.55"
-        />
-        <path
-          :d="geometry.lip"
-          fill="none"
-          :stroke="`url(#${id}-rim)`"
-          stroke-width=".8"
-          opacity=".72"
-        />
+          <path
+            :d="geometry.lip"
+            fill="none"
+            :stroke="`url(#${id}-rim)`"
+            :filter="`url(#${id}-edge)`"
+            stroke-width="5"
+            :opacity="light.radiance * 0.55"
+          />
+          <path
+            :d="geometry.lip"
+            fill="none"
+            :stroke="`url(#${id}-rim)`"
+            stroke-width=".8"
+            opacity=".72"
+          />
+        </g>
+        <g v-if="passage < 1" :opacity="Math.sin(Math.PI * passage) ** 2">
+          <path
+            :d="geometry.body"
+            :fill="`url(#${id}-passage)`"
+            style="filter: blur(18px)"
+            opacity=".45"
+          />
+          <path
+            :d="geometry.lip"
+            fill="none"
+            :stroke="`url(#${id}-passage)`"
+            stroke-width="4"
+            style="filter: blur(4px)"
+            opacity=".65"
+          />
+        </g>
       </g>
     </svg>
   </div>
