@@ -27,7 +27,7 @@ const scrollLeft = ref(0)
 const listId = useId()
 const completion = computed(() => {
   if (!opened.value || managing.value || composing.value || !atEnd.value || !title.value.trim())
-    return
+    return undefined
   return memory
     .matches(title.value)
     .find(
