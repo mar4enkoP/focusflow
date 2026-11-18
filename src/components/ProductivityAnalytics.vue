@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import { t, language } from '@/i18n'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import AppIcon from './AppIcon.vue'
 import { summarize } from '@/analytics'
 import { useFocusHistoryStore } from '@/stores/focusHistory'
 const section = ref<'overview' | 'sessions'>('overview')
 const weekday = (date: string) =>
-  new Date(`${date}T12:00:00`).toLocaleDateString('en', { weekday: 'short' })
+  new Date(`${date}T12:00:00`).toLocaleDateString(language.value, { weekday: 'short' })
 const history = useFocusHistoryStore()
 const now = ref(Date.now())
 let pulse: ReturnType<typeof setInterval> | undefined
@@ -21,71 +22,80 @@ const minutes = (ms: number) => (ms / 60000).toFixed(1).replace(/\.0$/, '')
 </script>
 <template>
   <div>
-    <div class="segments" role="group" aria-label="Analytics view">
+    <div class="segments" role="group" :aria-label="t('Analytics view')">
       <button type="button" :aria-pressed="section === 'overview'" @click="section = 'overview'">
-        Overview
+        {{ t(' Overview ') }}
       </button>
       <button type="button" :aria-pressed="section === 'sessions'" @click="section = 'sessions'">
-        Sessions
+        {{ t(' Sessions ') }}
       </button>
     </div>
     <template v-if="section === 'overview'">
       <dl class="metrics">
         <div class="metric">
-          <dt class="metric-label">Focus today</dt>
-          <dd class="metric-value">{{ minutes(data.todayMs) }} <small>min</small></dd>
+          <dt class="metric-label">{{ t('Focus today') }}</dt>
+          <dd class="metric-value">
+            {{ t(minutes(data.todayMs)) }} <small>{{ t('min') }}</small>
+          </dd>
         </div>
         <div class="metric">
-          <dt class="metric-label">This week</dt>
-          <dd class="metric-value">{{ minutes(data.weekMs) }} <small>min</small></dd>
+          <dt class="metric-label">{{ t('This week') }}</dt>
+          <dd class="metric-value">
+            {{ t(minutes(data.weekMs)) }} <small>{{ t('min') }}</small>
+          </dd>
         </div>
       </dl>
       <div class="section-heading">
-        <h3>Last 7 days</h3>
+        <h3>{{ t('Last 7 days') }}</h3>
       </div>
-      <ul class="activity" aria-label="Daily focus activity">
+      <ul class="activity" :aria-label="t('Daily focus activity')">
         <li
           v-for="day in data.days"
           :key="day.date"
-          :title="day.date + ': ' + minutes(day.ms) + ' min'"
+          :title="t(day.date + ': ' + minutes(day.ms) + ' min')"
           :class="{ today: day.date === data.days[data.days.length - 1]?.date }"
         >
           <span class="chart-value"
-            >{{ minutes(day.ms) }}<span class="sr-only"> minutes on {{ day.date }}</span></span
+            >{{ t(minutes(day.ms))
+            }}<span class="sr-only">{{ t(' minutes on ') }}{{ t(day.date) }}</span></span
           >
           <span class="bar" aria-hidden="true"
             ><i :style="{ height: (day.ms / max) * 100 + '%' }"
           /></span>
-          <span class="day-label">{{ weekday(day.date) }}</span>
+          <span class="day-label">{{ t(weekday(day.date)) }}</span>
         </li>
       </ul>
       <div class="secondary-metrics">
         <div>
-          <span class="metric-label" title="Completed today / all time">Done · today / total</span
+          <span class="metric-label" :title="t('Completed today / all time')">{{
+            t('Done · today / total')
+          }}</span
           ><strong
-            >{{ data.completedToday }} <span>/ {{ data.completed }}</span></strong
+            >{{ t(data.completedToday) }} <span>/ {{ t(data.completed) }}</span></strong
           >
         </div>
         <div>
-          <span class="metric-label" title="Estimation accuracy, all time">Accuracy</span
+          <span class="metric-label" :title="t('Estimation accuracy, all time')">{{
+            t('Accuracy')
+          }}</span
           ><strong>{{
-            data.accuracy === undefined ? '—' : Math.round(data.accuracy) + '%'
+            t(data.accuracy === undefined ? '—' : Math.round(data.accuracy) + '%')
           }}</strong>
         </div>
       </div>
     </template>
     <template v-else>
       <div class="section-heading">
-        <h3>Planned / actual</h3>
-        <small>Latest 10 completions</small>
+        <h3>{{ t('Planned / actual') }}</h3>
+        <small>{{ t('Latest 10 completions') }}</small>
       </div>
       <div v-if="data.records.length" class="table-scroll">
         <table>
           <thead>
             <tr>
-              <th>Task</th>
-              <th>Planned</th>
-              <th>Actual</th>
+              <th>{{ t('Task') }}</th>
+              <th>{{ t('Planned') }}</th>
+              <th>{{ t('Actual') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -100,8 +110,8 @@ const minutes = (ms: number) => (ms / 60000).toFixed(1).replace(/\.0$/, '')
                   ><AppIcon :name="record.category ?? 'layers'" />{{ record.title }}</span
                 >
               </td>
-              <td>{{ record.plannedMinutes }} min</td>
-              <td>{{ minutes(record.actualMs) }} min</td>
+              <td>{{ t(record.plannedMinutes) }}{{ t(' min') }}</td>
+              <td>{{ t(minutes(record.actualMs)) }}{{ t(' min') }}</td>
             </tr>
           </tbody>
         </table>
@@ -110,36 +120,47 @@ const minutes = (ms: number) => (ms / 60000).toFixed(1).replace(/\.0$/, '')
     <template v-if="section === 'sessions'">
       <template v-if="data.records.length">
         <div class="section-heading">
-          <h3>By category</h3>
-          <small>All time</small>
+          <h3>{{ t('By category') }}</h3>
+          <small>{{ t('All time') }}</small>
         </div>
         <ul class="categories">
           <li v-for="category in data.categories" :key="category.name">
             <AppIcon
               :name="category.name.startsWith('Unknown') ? 'layers' : category.name"
-            /><span>{{ category.name }}</span
-            ><small>{{ minutes(category.ms) }} min</small>
+            /><span>{{ t(category.name) }}</span
+            ><small>{{ t(minutes(category.ms)) }}{{ t(' min') }}</small>
           </li>
         </ul>
       </template>
     </template>
-    <p v-if="!data.records.length" class="empty-state">No completed sessions yet.</p>
+    <p v-if="!data.records.length" class="empty-state">{{ t('No completed sessions yet.') }}</p>
     <details v-if="section === 'sessions'" class="method">
-      <summary>About data</summary>
+      <summary>{{ t('About data') }}</summary>
       <p>
-        Running, paused and unfinished tasks are excluded. Weeks start Monday in your local
-        timezone.
+        {{
+          t(
+            ' Running, paused and unfinished tasks are excluded. Weeks start Monday in your local timezone. ',
+          )
+        }}
       </p>
       <p>
-        Accuracy = 100% minus mean absolute percentage error versus actual time, floored at 0%.
-        Sessions under one minute are excluded from accuracy. It is a historical comparison, not a
-        prediction guarantee.
+        {{
+          t(
+            ' Accuracy = 100% minus mean absolute percentage error versus actual time, floored at 0%. Sessions under one minute are excluded from accuracy. It is a historical comparison, not a prediction guarantee. ',
+          )
+        }}
       </p>
       <p v-if="data.legacy">
-        {{ data.legacy }} older records lack complete timing intervals: unlocated focus is assigned
-        to the completion date. Missing categories remain unknown.
+        {{ t(data.legacy)
+        }}{{
+          t(
+            ' older records lack complete timing intervals: unlocated focus is assigned to the completion date. Missing categories remain unknown. ',
+          )
+        }}
       </p>
-      <p v-if="data.excluded">Unreliable, empty or duplicate observations are excluded.</p>
+      <p v-if="data.excluded">
+        {{ t('Unreliable, empty or duplicate observations are excluded.') }}
+      </p>
     </details>
   </div>
 </template>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 defineProps<{ compact: boolean }>()
 </script>
 
@@ -6,8 +7,12 @@ defineProps<{ compact: boolean }>()
   <div class="welcome-intro" :class="{ expanded: !compact }">
     <Transition name="heading" mode="out-in">
       <h1 v-if="compact" key="welcome" id="creation-title">
-        <span class="line-mask"><span>A little focus.</span></span>
-        <span class="line-mask"><span>Start with one task.</span></span>
+        <span class="line-mask"
+          ><span>{{ t('A little focus.') }}</span></span
+        >
+        <span class="line-mask"
+          ><span>{{ t('Start with one task.') }}</span></span
+        >
       </h1>
     </Transition>
   </div>

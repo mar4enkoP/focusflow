@@ -24,7 +24,7 @@ interface Snapshot {
 }
 const number = (v: unknown): v is number =>
   typeof v === 'number' && Number.isSafeInteger(v) && v >= 0
-function validTimer(input: unknown): input is Timer {
+export function validTimer(input: unknown): input is Timer {
   if (!input || typeof input !== 'object') return false
   const value = input as Record<string, unknown>
   return (

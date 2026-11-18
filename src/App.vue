@@ -1,8 +1,8 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useTimerPulse } from './composables/useTimerPulse'
-import { useTaskDeletionStore } from './stores/taskDeletion'
-const deletion = useTaskDeletionStore()
+import DeletionToast from './components/DeletionToast.vue'
 import { useTasksStore, type Task, type TaskInput } from '@/stores/tasks'
 import AppIcon from '@/components/AppIcon.vue'
 import TaskForm from '@/components/TaskForm.vue'
@@ -14,7 +14,7 @@ import FocusBackdrop from '@/components/FocusBackdrop.vue'
 import WorkspaceTools from '@/components/WorkspaceTools.vue'
 import ScreenHeading from '@/components/ScreenHeading.vue'
 import { useWorkspaceAccessStore } from '@/stores/workspaceAccess'
-import { persistenceNotice } from './persistence'
+import { persistenceNotice, STORAGE_KEY } from './persistence'
 import { useTimerStore } from '@/stores/timer'
 const appearance = useAppearanceStore()
 const access = useWorkspaceAccessStore()
@@ -64,21 +64,34 @@ watch(
   { immediate: true },
 )
 const workspaceOpen = ref(false)
-const workspaceView = ref<'Planner' | 'Analytics'>()
+const workspaceView = ref<'Planner' | 'Analytics' | 'Appearance' | 'Data'>()
 useTimerPulse(timer, access)
 function focus(id: string) {
   if (!access.canEdit) return
+  showFocusHint.value = false
   timer.select(id)
   view.value = 'focus'
 }
 const store = useTasksStore()
-const view = ref<'list' | 'form' | 'focus'>(access.canEdit && !store.tasks.length ? 'form' : 'list')
+// The first successful save creates a workspace snapshot. Deleting the last
+// task keeps that snapshot, while resetting the workspace removes it.
+function needsWelcome() {
+  if (!access.canEdit || store.tasks.length) return false
+  try {
+    return localStorage.getItem(STORAGE_KEY) === null
+  } catch {
+    return true
+  }
+}
+const welcome = ref(needsWelcome())
+const showFocusHint = ref(false)
+const view = ref<'list' | 'form' | 'focus'>(welcome.value ? 'form' : 'list')
 function startFocus() {
   const task = timer.task ?? store.tasks.find((task) => !task.completed)
   if (task) focus(task.id)
 }
 const editing = ref<Task>()
-const welcome = ref(access.canEdit && !store.tasks.length)
+
 const listArrival = ref(false)
 let arrivalTimer: ReturnType<typeof setTimeout> | undefined
 watch(
@@ -86,9 +99,12 @@ watch(
   (ready) => {
     if (!ready || !store.tasks.length || reducedMotion.value) return
     listArrival.value = true
-    arrivalTimer = setTimeout(() => {
-      listArrival.value = false
-    }, 1400)
+    arrivalTimer = setTimeout(
+      () => {
+        listArrival.value = false
+      },
+      appearance.theme === '1' ? 2600 : 1400,
+    )
   },
   { immediate: true },
 )
@@ -106,12 +122,12 @@ watch(
   () => [access.canEdit, access.generation],
   () => {
     if (access.canEdit && !startupChecked) {
-      welcome.value = !store.tasks.length
+      welcome.value = needsWelcome()
       startupChecked = true
     } else if (!access.canEdit) welcome.value = false
     editing.value = undefined
     workspaceOpen.value = false
-    view.value = access.canEdit && !store.tasks.length ? 'form' : 'list'
+    view.value = welcome.value ? 'form' : 'list'
   },
 )
 const heading = ref<InstanceType<typeof ScreenHeading>>()
@@ -175,6 +191,7 @@ function showList() {
 }
 function save(input: TaskInput) {
   if (!store.save(input, editing.value?.id)) return
+  if (welcome.value) showFocusHint.value = true
   notice.value = editing.value ? 'Task updated.' : 'Task added.'
   void showList()
 }
@@ -184,6 +201,7 @@ function save(input: TaskInput) {
     class="app-shell"
     :class="{
       'list-arrival': listArrival,
+      'ember-arrival': listArrival && appearance.theme === '1',
       'is-focus': view === 'focus',
       'is-creating': view === 'form',
       'welcome-scene': !contentReady || (welcome && view === 'form'),
@@ -191,17 +209,23 @@ function save(input: TaskInput) {
       'is-welcome-expanded': welcome && welcomeExpanded && view === 'form' && !workspaceOpen,
     }"
   >
-    <Transition v-if="contentReady" name="theme" mode="out-in">
-      <LegacyFocusBackdrop
-        v-if="appearance.theme === '1'"
-        :class="{ 'light-concealed': view === 'form' && !workspaceOpen }"
-        :mode="workspaceOpen ? 'workspace' : view"
-        :running="timer.isFocusing"
-      />
-    </Transition>
+    <LegacyFocusBackdrop
+      :arriving="listArrival"
+      v-if="contentReady"
+      :workspace-view="workspaceView"
+      :class="{
+        'light-concealed':
+          appearance.theme !== '1' || (welcome && view === 'form' && !workspaceOpen),
+      }"
+      :mode="workspaceOpen ? 'workspace' : view"
+      :running="timer.isFocusing"
+    />
     <FocusBackdrop
       v-if="contentReady"
-      :class="{ 'light-concealed': appearance.theme === '1' && (view !== 'form' || workspaceOpen) }"
+      :class="{
+        'light-concealed':
+          appearance.theme === '1' && (!welcome || view !== 'form' || workspaceOpen),
+      }"
       ref="backdrop"
       :mode="workspaceOpen ? 'workspace' : view"
       :welcome="welcome"
@@ -213,9 +237,9 @@ function save(input: TaskInput) {
       <a
         class="brand"
         href="./"
-        aria-label="FocusFlow home"
+        :aria-label="t('FocusFlow home')"
         @click.prevent="store.tasks.length ? showList() : create()"
-        ><AppIcon name="brand" />FocusFlow</a
+        ><AppIcon name="brand" />{{ t('FocusFlow') }}</a
       >
       <WorkspaceTools
         :key="access.generation + String(access.canEdit)"
@@ -233,14 +257,14 @@ function save(input: TaskInput) {
       v-if="contentReady && !workspaceOpen && view !== 'focus' && (!welcome || welcomeRevealed)"
       ref="heading"
       :id="titleId"
-      :text="screenTitle"
-      :initial-delay="listArrival ? 120 : 0"
-      :initial-duration="listArrival ? 1000 : 400"
+      :text="t(screenTitle)"
+      :initial-delay="listArrival ? (appearance.theme === '1' ? 1000 : 120) : 0"
+      :initial-duration="listArrival ? (appearance.theme === '1' ? 1320 : 1000) : 400"
       :reduced-motion="reducedMotion"
       :relocate="welcome && welcomeExpanded && view === 'form' && !workspaceOpen"
     />
     <p v-if="showAccessNotice && accessNotice" class="access-notice" role="status">
-      {{ accessNotice }}
+      {{ t(accessNotice) }}
     </p>
     <main
       :class="{ 'workspace-hidden': workspaceOpen, 'task-list-screen': view === 'list' }"
@@ -274,24 +298,24 @@ function save(input: TaskInput) {
         <section v-else class="task-panel" aria-labelledby="list-title">
           <div class="panel-heading">
             <span class="task-count"
-              >Tasks <span>{{ store.tasks.length }}</span></span
+              >{{ t('Tasks ') }}<span>{{ t(store.tasks.length) }}</span></span
             >
             <button
               v-if="store.tasks.length"
               :disabled="!access.canEdit"
-              aria-label="Add a task"
-              title="Add a task"
+              :aria-label="t('Add a task')"
+              :title="t('Add a task')"
               @click="create"
             >
-              <AppIcon name="plus" /><span>Add task</span>
+              <AppIcon name="plus" /><span>{{ t('Add task') }}</span>
             </button>
           </div>
           <TaskList v-if="store.tasks.length" @edit="edit" @select="focus" />
           <div v-if="!store.tasks.length" class="empty">
             <AppIcon name="list" />
-            <h2>{{ access.canEdit ? 'No tasks yet' : 'Workspace is read-only' }}</h2>
+            <h2>{{ t(access.canEdit ? 'No tasks yet' : 'Workspace is read-only') }}</h2>
             <button class="primary" :disabled="!access.canEdit" @click="create">
-              <AppIcon name="plus" />Create a task
+              <AppIcon name="plus" />{{ t('Create a task ') }}
             </button>
           </div>
           <button
@@ -300,8 +324,12 @@ function save(input: TaskInput) {
             :disabled="!access.canEdit"
             @click="startFocus"
           >
-            Start Focus<AppIcon name="arrow" />
+            {{ t(' Start Focus') }}<AppIcon name="arrow" />
           </button>
+          <p v-if="showFocusHint && store.remaining" class="focus-hint">
+            <span>{{ t('Ready to begin? Press') }}</span>
+            <span class="hint-action">{{ t('Start Focus') }}<AppIcon name="arrow" /></span>
+          </p>
         </section>
       </Transition>
     </main>
@@ -313,8 +341,8 @@ function save(input: TaskInput) {
       <button
         v-if="view === 'focus' && timer.task"
         class="task-dock focus-dock"
-        aria-label="Open task panel"
-        title="Back to tasks"
+        :aria-label="t('Open task panel')"
+        :title="t('Back to tasks')"
         @click="showList"
       >
         <AppIcon :name="timer.task.category" />
@@ -322,39 +350,48 @@ function save(input: TaskInput) {
           <span class="dock-row">
             <span class="dock-title">{{ timer.task.title }}</span>
             <span class="dock-time"
-              >{{ Math.round(timer.progress) }}% &middot;
-              {{ Math.ceil(timer.remaining / 60000) }} min</span
+              >{{ t(Math.round(timer.progress)) }}% &middot;
+              {{ t(Math.ceil(timer.remaining / 60000)) }}{{ t(' min') }}</span
             >
           </span>
-          <progress :value="timer.progress" max="100" aria-label="Session progress" />
+          <progress :value="timer.progress" max="100" :aria-label="t('Session progress')" />
         </span></button
       ><button
         v-else-if="view !== 'list' && (view === 'focus' || store.tasks.length)"
         class="task-dock"
-        aria-label="Back to tasks"
-        title="Back to tasks"
+        :aria-label="t('Back to tasks')"
+        :title="t('Back to tasks')"
         @click="showList"
       >
         <AppIcon name="list" /><span
-          >{{ store.remaining }} {{ store.remaining === 1 ? 'task' : 'tasks' }} to do</span
-        ><span class="dock-duration">{{ store.totalMinutes }} min</span><span>Tasks</span
+          >{{ t(store.remaining) }} {{ t(store.remaining === 1 ? 'task' : 'tasks')
+          }}{{ t(' to do') }}</span
+        ><span class="dock-duration">{{ t(store.totalMinutes) }}{{ t(' min') }}</span
+        ><span>{{ t('Tasks') }}</span
         ><AppIcon name="arrow" />
       </button>
       <p v-if="contentReady && view === 'list'" class="task-summary">
-        {{ store.remaining }} tasks to do &middot; {{ store.totalMinutes }} min planned
+        {{ t(store.remaining) }}{{ t(' tasks to do · ') }}{{ t(store.totalMinutes)
+        }}{{ t(' min planned ') }}
       </p>
-      <p v-if="access.canEdit || !showAccessNotice">{{ persistenceNotice }}</p>
+      <p v-if="access.canEdit || !showAccessNotice">{{ t(persistenceNotice) }}</p>
     </footer>
-    <span class="sr-only" role="status">{{ notice }}</span>
-    <div v-if="deletion.title" class="undo-notice" role="status">
-      Task deleted. <button type="button" @click="deletion.undo">Undo</button>
-    </div>
+    <span class="sr-only" role="status">{{ t(notice) }}</span>
+    <DeletionToast />
   </div>
 </template>
 <style scoped lang="scss">
 @media (prefers-reduced-motion: no-preference) {
   .list-arrival .task-panel {
     animation: list-arrive 1040ms cubic-bezier(0.22, 1, 0.36, 1) 360ms backwards;
+  }
+  .ember-arrival .task-panel {
+    animation-duration: 1800ms;
+    animation-delay: 800ms;
+  }
+  .ember-arrival .task-summary {
+    animation-duration: 1700ms !important;
+    animation-delay: 900ms !important;
   }
   .list-arrival .task-summary {
     animation: summary-arrive 980ms cubic-bezier(0.22, 1, 0.36, 1) 420ms backwards;
@@ -474,28 +511,63 @@ function save(input: TaskInput) {
   }
 }
 :deep(.focus-backdrop) {
-  transition: opacity 900ms ease;
+  transition: opacity 250ms ease 950ms;
+}
+:deep(.light-emission) {
+  transform: scale(1, 1);
+  transition: transform 1450ms cubic-bezier(0.22, 1, 0.36, 1) 950ms;
+}
+:deep(.light-concealed .light-emission) {
+  transform: scale(0.04, 0.015);
+  transition: transform 950ms cubic-bezier(0.45, 0, 0.55, 1);
 }
 :deep(.light-concealed) {
   opacity: 0;
+  transition: opacity 150ms ease 800ms;
 }
-.undo-notice {
-  position: fixed;
-  bottom: 16px;
-  right: 16px;
-  z-index: 100;
-  padding: 8px 12px;
-  background: #18171a;
-  border: 1px solid var(--border);
-  border-radius: 12px;
+:deep(.radiant-emission),
+:deep(.light-concealed .radiant-emission) {
+  transform: none;
 }
-.theme-enter-active,
-.theme-leave-active {
-  transition: opacity 180ms ease;
+:deep(.radiant-atmosphere) {
+  opacity: 1;
+  transform: scaleY(1);
+  transition:
+    transform 1450ms cubic-bezier(0.22, 1, 0.36, 1) 950ms,
+    opacity 1200ms ease 950ms;
 }
-.theme-enter-from,
-.theme-leave-to {
+:deep(.light-concealed .radiant-atmosphere) {
   opacity: 0;
+  transform: scaleY(0.08);
+  // Keep the volume aligned with its curved rim while it is visible. Prepare
+  // the compressed ignition pose only after the outgoing glow has gone dark.
+  transition:
+    transform 0s linear 850ms,
+    opacity 750ms ease-in;
+}
+:deep(.radiant-core) {
+  opacity: 1;
+  transition: opacity 450ms ease 950ms;
+}
+:deep(.light-concealed .radiant-core) {
+  opacity: 0;
+  transition: opacity 350ms ease 600ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  :deep(.radiant-atmosphere),
+  :deep(.radiant-core),
+  :deep(.light-concealed .radiant-atmosphere),
+  :deep(.light-concealed .radiant-core) {
+    transition: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :deep(.focus-backdrop),
+  :deep(.light-emission),
+  :deep(.light-concealed .light-emission),
+  :deep(.light-concealed) {
+    transition: none;
+  }
 }
 .access-notice {
   // Never participate in the flex layout: showing or clearing a warning must
@@ -558,6 +630,37 @@ main {
   scrollbar-width: none;
   &::-webkit-scrollbar {
     display: none;
+  }
+}
+.focus-hint {
+  margin: 16px 0 0;
+  min-height: 25px;
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 17px;
+  .hint-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    padding: 0 8px;
+    height: 25px;
+    border-radius: 5px;
+    border: 1px solid #ffffff40;
+    background: #ffffff06;
+    color: var(--text);
+    font: 11px/1 system-ui;
+    box-shadow: inset 0 -2px 0 #ffffff0a;
+    svg {
+      width: 13px;
+      height: 13px;
+    }
   }
 }
 main.task-list-screen {

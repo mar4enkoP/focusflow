@@ -1,30 +1,72 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
+import { useId } from 'vue'
 import { useAppearanceStore } from '@/stores/appearance'
+const id = useId()
 const appearance = useAppearanceStore()
 </script>
 
 <template>
   <fieldset class="theme-options">
-    <legend>Освещение</legend>
-    <label v-for="option in ['1', '2'] as const" :key="option" class="theme-option">
+    <legend class="sr-only">{{ t('Lighting') }}</legend>
+    <label v-for="option in ['2', '1'] as const" :key="option" class="theme-option">
       <input
         type="radio"
         name="light-theme"
         :value="option"
+        :aria-label="t(option === '2' ? 'Classic' : 'Ember')"
         :checked="appearance.theme === option"
         @change="appearance.selectTheme(option)"
       />
       <span class="theme-card">
-        <span class="theme-preview" :data-theme="option" aria-hidden="true"><span /></span>
+        <span class="theme-preview" :data-theme="option" aria-hidden="true">
+          <svg viewBox="0 0 200 120" fill="none">
+            <defs>
+              <linearGradient
+                :id="id + option"
+                gradientUnits="userSpaceOnUse"
+                x1="10"
+                y1="0"
+                x2="190"
+                y2="0"
+              >
+                <stop stop-color="#ef3340" stop-opacity="0" />
+                <stop offset=".3" stop-color="#ff6736" />
+                <stop offset=".55" stop-color="#ffe2a8" />
+                <stop offset=".8" stop-color="#ff7635" />
+                <stop offset="1" stop-color="#ef3340" stop-opacity="0" />
+              </linearGradient>
+            </defs>
+            <g :stroke="`url(#${id + option})`">
+              <path
+                class="preview-glow"
+                :d="option === '1' ? 'M10 84H190' : 'M18 44C25 104 161 110 182 34'"
+              />
+              <path
+                class="preview-core"
+                :d="option === '1' ? 'M10 84H190' : 'M18 44C25 104 161 110 182 34'"
+              />
+            </g>
+          </svg>
+        </span>
         <span class="theme-label"
-          >{{ option }} — {{ option === '1' ? 'Старая' : 'Новая'
-          }}<span class="selection" aria-hidden="true"
-        /></span>
+          >{{ t(option === '2' ? 'Classic' : 'Ember')
+          }}<span class="selection" aria-hidden="true">
+            <template v-if="appearance.theme === option">
+              <span v-if="appearance.applying" class="applying"
+                >{{ t('Applying') }}<span class="progress"
+              /></span>
+              <span v-else class="applied">{{ t('✓ Active') }}</span>
+            </template>
+          </span></span
+        >
       </span>
     </label>
   </fieldset>
-  <p class="theme-hint">Изменения видны сразу. Выбор сохраняется на этом устройстве.</p>
-  <p v-if="appearance.notice" class="theme-notice" role="status">{{ appearance.notice }}</p>
+  <p class="theme-hint" role="status">
+    {{ t(appearance.applying ? 'Applying your light…' : 'Your theme is saved on this device.') }}
+  </p>
+  <p v-if="appearance.notice" class="theme-notice" role="status">{{ t(appearance.notice) }}</p>
 </template>
 
 <style scoped lang="scss">
@@ -61,7 +103,7 @@ input {
   border: 1px solid var(--border);
   border-radius: 12px;
   overflow: hidden;
-  background: #0a090c;
+  background: var(--glass-fill);
   transition: border-color 160ms;
 }
 input:checked + .theme-card {
@@ -75,26 +117,26 @@ input:focus-visible + .theme-card {
   border-color: #bca397;
 }
 .theme-preview {
-  position: relative;
   display: block;
-  height: 92px;
+  height: 132px;
   overflow: hidden;
-  span {
-    position: absolute;
-    width: 110px;
-    height: 48px;
-    left: 50%;
-    bottom: 17px;
-    transform: translateX(-50%);
-    border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 80%, #a4311714, transparent 70%);
+  svg {
+    width: 100%;
+    height: 100%;
   }
-  &[data-theme='1'] span {
-    border-bottom: 2px solid #ff9b42;
-    box-shadow: 0 10px 16px -8px #e9421c;
+  .preview-glow {
+    stroke-width: 15px;
+    filter: blur(10px);
+    opacity: 0.65;
   }
-  &[data-theme='2'] span {
-    background: linear-gradient(transparent, #d8420d70 30%, #ffab34 82%, #ffe5a1);
-    box-shadow: 0 0 20px #f95a223b;
+  .preview-core {
+    stroke-width: 1.5px;
+    filter: blur(0.5px);
+  }
+  &[data-theme='2'] .preview-glow {
+    stroke-width: 23px;
+    filter: blur(12px);
   }
 }
 .theme-label {
@@ -105,15 +147,45 @@ input:focus-visible + .theme-card {
   font-size: 12px;
 }
 .selection {
-  width: 10px;
-  height: 10px;
-  border: 1px solid #777079;
-  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 16px;
+  height: 16px;
 }
-input:checked + .theme-card .selection {
+.applied {
+  font-size: 10px;
+  color: #e7b38d;
+  white-space: nowrap;
+}
+.applying {
+  position: relative;
+  font-size: 10px;
+  color: var(--muted);
+  padding-bottom: 5px;
+}
+.progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 1px;
+  width: 100%;
   background: #e7b38d;
-  border-color: #e7b38d;
-  box-shadow: inset 0 0 0 2px #251b16;
+  transform-origin: left;
+  animation: apply-progress 2.4s ease-in-out both;
+}
+@keyframes apply-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .progress {
+    animation: none;
+  }
 }
 .theme-hint,
 .theme-notice {

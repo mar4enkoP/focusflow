@@ -8,5 +8,5 @@ defineOptions({ name: 'AppRoot' })
 </script>
 <template>
   <AppBoundary :recovery="recovery"><App /></AppBoundary>
-  <EmergencyExport />
+  <EmergencyExport v-if="recovery.failure.value" />
 </template>

@@ -18,6 +18,35 @@ describe('focus timer', () => {
     timer.select(tasks.tasks[0]!.id)
     return { tasks, timer }
   }
+  it('updates the selected timer after editing its duration, including before first start', () => {
+    const { tasks, timer } = setup()
+    const task = tasks.tasks[0]!
+    tasks.save({ ...task, duration: 25 }, task.id)
+    expect(timer.remaining).toBe(25 * 60000)
+    tasks.save({ ...task, duration: 6 }, task.id)
+    expect(timer.remaining).toBe(6 * 60000)
+    timer.start()
+    vi.advanceTimersByTime(10000)
+    timer.sync()
+    expect(timer.remaining).toBe(350000)
+  })
+  it('preserves elapsed time when editing a cached or running timer', () => {
+    const { tasks, timer } = setup()
+    const task = tasks.tasks[0]!
+    timer.start()
+    vi.advanceTimersByTime(20000)
+    timer.select(tasks.tasks[1]!.id)
+    tasks.save({ ...task, duration: 6 }, task.id)
+    timer.select(task.id)
+    expect(timer.remaining).toBe(340000)
+    timer.start()
+    vi.advanceTimersByTime(10000)
+    tasks.save({ ...task, duration: 2 }, task.id)
+    expect(timer.remaining).toBe(90000)
+    vi.advanceTimersByTime(10000)
+    timer.sync()
+    expect(timer.remaining).toBe(80000)
+  })
   it('uses elapsed timestamps despite missing ticks; pause/resume and repeated start are safe', () => {
     const { timer } = setup()
     timer.start()
@@ -75,7 +104,7 @@ describe('focus timer', () => {
     const { tasks, timer } = setup()
     timer.start()
     tasks.save({ title: 'Edited', duration: 3, category: 'Work' }, timer.selectedId)
-    expect(timer.remaining).toBe(60000)
+    expect(timer.remaining).toBe(180000)
     timer.reset()
     expect(timer.remaining).toBe(180000)
     tasks.remove(timer.selectedId!)

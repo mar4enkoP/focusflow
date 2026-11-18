@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 import { useWorkspaceAccessStore } from '@/stores/workspaceAccess'
 import { computed, nextTick, ref, useId } from 'vue'
 import { useTaskMemoryStore, type TaskMemoryEntry } from '@/stores/taskMemory'
@@ -117,7 +118,7 @@ defineExpose({
     @focusout="!root?.contains($event.relatedTarget as Node) && close()"
   >
     <div class="title-label" :class="{ 'minimal-label': minimal }">
-      <label for="task-title" data-form-part>Task title</label>
+      <label for="task-title" data-form-part>{{ t('Task title') }}</label>
     </div>
     <div class="title-anchor">
       <div class="title-field" data-form-part>
@@ -134,7 +135,7 @@ defineExpose({
             id="task-title"
             ref="field"
             v-model="title"
-            placeholder="Task name"
+            :placeholder="t('Task name')"
             autocomplete="off"
             aria-autocomplete="inline"
             :aria-invalid="!!error"
@@ -161,8 +162,8 @@ defineExpose({
           v-if="!minimal && (memory.entries.length || memoryNotice || managing)"
           type="button"
           class="memory-toggle"
-          aria-label="Remembered tasks"
-          title="Remembered tasks"
+          :aria-label="t('Remembered tasks')"
+          :title="t('Remembered tasks')"
           data-form-part
           :aria-expanded="managing"
           :aria-controls="`${listId}-management`"
@@ -171,7 +172,7 @@ defineExpose({
           <AppIcon name="clock" />
         </button>
         <span v-if="completion" :id="`${listId}-completion`" class="sr-only"
-          >Press Tab to complete: {{ completion.title }}</span
+          >{{ t('Press Tab to complete: ') }}{{ completion.title }}</span
         >
       </div>
       <Transition name="panel">
@@ -180,9 +181,9 @@ defineExpose({
             :id="`${listId}-management`"
             class="memory-menu"
             role="region"
-            aria-label="Remembered tasks"
+            :aria-label="t('Remembered tasks')"
           >
-            <p class="memory-help">Choose a remembered task, or forget it.</p>
+            <p class="memory-help">{{ t('Choose a remembered task, or forget it.') }}</p>
             <div v-for="entry in allEntries" :key="entry.title" class="memory-row">
               <AppIcon :name="entry.category" /><button
                 type="button"
@@ -196,20 +197,22 @@ defineExpose({
                 :disabled="!access.canEdit"
                 type="button"
                 class="icon-button"
-                :aria-label="`Forget ${entry.title}`"
-                title="Forget suggestion"
+                :aria-label="t(`Forget ${entry.title}`)"
+                :title="t('Forget suggestion')"
                 @click="forget(entry.title)"
               >
                 <AppIcon name="trash" />
               </button>
             </div>
-            <p v-if="!allEntries.length" class="memory-help">No remembered tasks.</p>
+            <p v-if="!allEntries.length" class="memory-help">{{ t('No remembered tasks.') }}</p>
           </div>
         </FloatingMenu>
       </Transition>
     </div>
-    <p v-if="memoryNotice" class="memory-help" role="status" data-form-part>{{ memoryNotice }}</p>
-    <p v-if="error && !minimal" id="title-error" class="error" data-form-part>{{ error }}</p>
+    <p v-if="memoryNotice" class="memory-help" role="status" data-form-part>
+      {{ t(memoryNotice) }}
+    </p>
+    <p v-if="error && !minimal" id="title-error" class="error" data-form-part>{{ t(error) }}</p>
   </div>
 </template>
 

@@ -4,6 +4,8 @@ import Root from './Root.vue'
 import { createErrorRecovery } from './errorRecovery'
 import { startWorkspace } from './workspace'
 import './assets/main.scss'
+import { language } from './i18n'
+document.documentElement.lang = language.value
 
 const recovery = createErrorRecovery()
 const app = createApp(Root, { recovery })

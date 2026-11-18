@@ -1,4 +1,5 @@
 ﻿<script setup lang="ts">
+import { t } from '@/i18n'
 import { useWorkspaceAccessStore } from '@/stores/workspaceAccess'
 import { computed } from 'vue'
 import { useTimerStore } from '@/stores/timer'
@@ -13,31 +14,35 @@ const display = computed(() => {
 })
 </script>
 <template>
-  <section class="focus" aria-label="Focus timer">
-    <p class="task-title">{{ timer.task?.title ?? 'Your space is clear' }}</p>
-    <div class="countdown" role="timer" aria-label="Time remaining">{{ display }}</div>
+  <section class="focus" :aria-label="t('Focus timer')">
+    <p class="task-title">{{ timer.task?.title ?? t('Your space is clear') }}</p>
+    <div class="countdown" role="timer" :aria-label="t('Time remaining')">{{ t(display) }}</div>
     <p class="status" role="status">
       {{
-        !access.canEdit
-          ? 'Read-only · Timer snapshot'
-          : !timer.task
-            ? 'Choose an unfinished task to begin'
-            : timer.state === 'expired'
-              ? timer.isFocusing
-                ? 'Time is up · Focus time is still being recorded.'
-                : 'Time is up. Continue focus, add time or complete.'
-              : timer.state === 'running'
-                ? 'Focus'
-                : timer.state === 'paused'
-                  ? 'Paused · Take your time'
-                  : 'Ready when you are'
+        t(
+          !access.canEdit
+            ? 'Read-only · Timer snapshot'
+            : !timer.task
+              ? 'Choose an unfinished task to begin'
+              : timer.state === 'expired'
+                ? timer.isFocusing
+                  ? 'Time is up · Focus time is still being recorded.'
+                  : 'Time is up. Continue focus, add time or complete.'
+                : timer.state === 'running'
+                  ? 'Focus'
+                  : timer.state === 'paused'
+                    ? 'Paused · Take your time'
+                    : 'Ready when you are',
+        )
       }}
     </p>
-    <p v-if="timer.task" class="planned">Planned · {{ timer.task.duration }} min</p>
+    <p v-if="timer.task" class="planned">
+      {{ t('Planned · ') }}{{ t(timer.task.duration) }}{{ t(' min') }}
+    </p>
     <div class="controls">
       <button
-        aria-label="Reset timer"
-        title="Reset timer"
+        :aria-label="t('Reset timer')"
+        :title="t('Reset timer')"
         :disabled="!access.canEdit || !timer.task"
         @click="timer.reset"
       >
@@ -45,15 +50,15 @@ const display = computed(() => {
       </button>
       <button
         class="play"
-        :aria-label="timer.isFocusing ? 'Pause timer' : 'Start or resume timer'"
+        :aria-label="t(timer.isFocusing ? 'Pause timer' : 'Start or resume timer')"
         :disabled="!access.canEdit || !timer.task"
         @click="timer.isFocusing ? timer.pause() : timer.continueFocus()"
       >
         <AppIcon :name="timer.isFocusing ? 'pause' : 'play'" />
       </button>
       <button
-        aria-label="Complete task and select next"
-        title="Complete task and select next"
+        :aria-label="t('Complete task and select next')"
+        :title="t('Complete task and select next')"
         :disabled="!access.canEdit || !timer.task"
         @click="timer.complete"
       >
@@ -61,7 +66,7 @@ const display = computed(() => {
       </button>
     </div>
     <button class="add-time" :disabled="!access.canEdit || !timer.task" @click="timer.addTime">
-      +5 min
+      {{ t(' +5 min ') }}
     </button>
   </section>
 </template>

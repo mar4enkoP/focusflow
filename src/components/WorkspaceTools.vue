@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import ThemeSettings from './ThemeSettings.vue'
+import SettingsPanel from './SettingsPanel.vue'
 import AppIcon from './AppIcon.vue'
 import SessionPlanner from './SessionPlanner.vue'
 import ProductivityAnalytics from './ProductivityAnalytics.vue'
@@ -10,20 +11,28 @@ const planner = usePlannerStore()
 const tasks = useTasksStore()
 const emit = defineEmits<{
   focus: [id: string]
-  active: [value: boolean, panel?: 'Planner' | 'Analytics']
+  active: [value: boolean, panel?: 'Planner' | 'Analytics' | 'Appearance' | 'Data']
   tasks: []
 }>()
-const opened = ref<'Planner' | 'Analytics' | 'Theme'>()
+const opened = ref<'Planner' | 'Analytics' | 'Settings'>()
+const settingsSection = ref<'Appearance' | 'Data' | 'Language' | 'Music' | 'Notifications'>(
+  'Appearance',
+)
 watch(
-  opened,
-  (value) => emit('active', !!value && value !== 'Theme', value === 'Theme' ? undefined : value),
+  [opened, settingsSection],
+  ([value, section]) =>
+    emit(
+      'active',
+      !!value,
+      value === 'Settings' ? (section === 'Appearance' ? 'Appearance' : 'Data') : value,
+    ),
   { flush: 'sync' },
 )
 const dialog = ref<HTMLElement>()
 const navigation = ref<HTMLElement>()
 const supportsPopover = typeof HTMLElement !== 'undefined' && 'showPopover' in HTMLElement.prototype
 let opener: HTMLElement | undefined
-async function open(panel: 'Planner' | 'Analytics' | 'Theme', event: MouseEvent) {
+async function open(panel: 'Planner' | 'Analytics' | 'Settings', event: MouseEvent) {
   opener = event.currentTarget as HTMLElement
   if (opened.value === panel) {
     close()
@@ -70,48 +79,50 @@ function showTasks() {
 }
 </script>
 <template>
-  <nav ref="navigation" aria-label="Workspace tools">
+  <nav ref="navigation" :aria-label="t('Workspace tools')">
     <button
       type="button"
-      aria-label="Planner"
+      :aria-label="t('Planner')"
       :aria-expanded="opened === 'Planner'"
       :title="
-        planner.overrun
-          ? 'A task exceeded its plan. Review the remaining schedule.'
-          : 'Plan a focus session'
+        t(
+          planner.overrun
+            ? 'A task exceeded its plan. Review the remaining schedule.'
+            : 'Plan a focus session',
+        )
       "
       @click="open('Planner', $event)"
     >
       <AppIcon name="list" /><span
         v-if="planner.overrun"
         class="review-dot"
-        aria-label="Schedule needs review"
+        :aria-label="t('Schedule needs review')"
       ></span></button
     ><button
       type="button"
-      aria-label="Analytics"
-      title="Analytics"
+      :aria-label="t('Analytics')"
+      :title="t('Analytics')"
       :aria-expanded="opened === 'Analytics'"
       @click="open('Analytics', $event)"
     >
       <AppIcon name="chart" />
     </button>
     <button
-      class="theme-trigger"
+      class="settings-trigger"
       type="button"
-      aria-label="Тема"
-      title="Тема"
-      :aria-expanded="opened === 'Theme'"
-      @click="open('Theme', $event)"
+      :aria-label="t('Settings')"
+      :title="t('Settings')"
+      :aria-expanded="opened === 'Settings'"
+      @click="open('Settings', $event)"
     >
-      <AppIcon name="layers" /><span>Тема</span>
+      <AppIcon name="settings" />
     </button>
   </nav>
   <div
     v-if="opened"
     ref="dialog"
     class="workspace-panel"
-    :class="{ 'theme-panel': opened === 'Theme' }"
+    :class="{ 'settings-panel': opened === 'Settings' }"
     role="dialog"
     aria-modal="false"
     :popover="supportsPopover ? 'manual' : undefined"
@@ -122,57 +133,36 @@ function showTasks() {
       <div class="heading">
         <h2 id="tool-title">
           <AppIcon
-            :name="opened === 'Planner' ? 'list' : opened === 'Theme' ? 'layers' : 'chart'"
-          />{{ opened === 'Theme' ? 'Тема' : opened }}
+            :name="opened === 'Planner' ? 'list' : opened === 'Settings' ? 'settings' : 'chart'"
+          />{{ t(opened) }}
         </h2>
-        <button
-          type="button"
-          :aria-label="opened === 'Theme' ? 'Закрыть тему' : `Close ${opened}`"
-          @click="close"
-        >
+        <button type="button" :aria-label="t(`Close ${opened}`)" @click="close">
           <AppIcon name="close" />
         </button>
       </div>
       <SessionPlanner v-if="opened === 'Planner'" @focus="focus" />
       <ProductivityAnalytics v-else-if="opened === 'Analytics'" />
-      <ThemeSettings v-else />
+      <SettingsPanel v-else v-model:section="settingsSection" />
     </div>
     <button
-      v-if="opened !== 'Theme'"
+      v-if="opened !== 'Settings'"
       class="workspace-dock"
       type="button"
-      aria-label="Open task list"
+      :aria-label="t('Open task list')"
       @click="showTasks"
     >
       <span class="dock-count"
-        ><strong>{{ tasks.remaining }}</strong> {{ tasks.remaining === 1 ? 'task' : 'tasks' }} to
-        do</span
+        ><strong>{{ t(tasks.remaining) }}</strong> {{ t(tasks.remaining === 1 ? 'task' : 'tasks')
+        }}{{ t(' to do') }}</span
       >
-      <span class="dock-time">{{ tasks.totalMinutes }} min</span>
+      <span class="dock-time">{{ t(tasks.totalMinutes) }}{{ t(' min') }}</span>
       <AppIcon name="arrow" />
     </button>
   </div>
 </template>
 <style scoped lang="scss">
-nav button.theme-trigger {
-  width: auto;
-  padding: 0 10px;
-  gap: 7px;
-}
-.workspace-panel.theme-panel {
-  inset: 76px 24px auto auto;
-  width: min(340px, calc(100vw - 32px));
-  height: auto;
-  max-height: calc(100svh - 100px);
-}
-.theme-panel .panel-content {
-  max-height: calc(100svh - 100px);
-  background: #151215ed;
-}
-@media (max-width: 480px) {
-  .workspace-panel.theme-panel {
-    right: 16px;
-  }
+.workspace-panel.settings-panel {
+  width: min(680px, calc(100vw - 32px));
 }
 
 nav {
