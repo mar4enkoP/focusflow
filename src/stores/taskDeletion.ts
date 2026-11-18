@@ -14,6 +14,7 @@ export const useTaskDeletionStore = defineStore('taskDeletion', () => {
   const history = useFocusHistoryStore()
   const access = useWorkspaceAccessStore()
   const title = ref('')
+  const revision = ref(0)
   let timeout: ReturnType<typeof setTimeout> | undefined
   let pending:
     | {
@@ -54,6 +55,7 @@ export const useTaskDeletionStore = defineStore('taskDeletion', () => {
       tasks.remove(id)
       record.after = JSON.stringify(timer.snapshot())
       pending = record
+      revision.value++
       title.value = task.title
     })
     timeout = setTimeout(clear, UNDO_WINDOW_MS)
@@ -104,5 +106,5 @@ export const useTaskDeletionStore = defineStore('taskDeletion', () => {
   // or lock handoff must never replay recovery against another owner's workspace.
   watch(() => [access.canEdit, access.generation], clear, { flush: 'sync' })
   onScopeDispose(clear)
-  return { title, remove, undo }
+  return { title, revision, remove, undo }
 })

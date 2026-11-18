@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 import { useWorkspaceAccessStore } from '@/stores/workspaceAccess'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useTasksStore } from '@/stores/tasks'
@@ -51,7 +52,8 @@ function openFocus(id: string) {
     <form v-if="!shown || editing" @submit.prevent="generate">
       <div class="inputs">
         <label
-          >Time (min)<input
+          >{{ t('Time (min)')
+          }}<input
             :disabled="!access.canEdit"
             v-model.number="minutes"
             type="number"
@@ -60,7 +62,8 @@ function openFocus(id: string) {
             required
         /></label>
         <label
-          >Break (min)<input
+          >{{ t('Break (min)')
+          }}<input
             :disabled="!access.canEdit"
             v-model.number="breakMinutes"
             type="number"
@@ -69,7 +72,8 @@ function openFocus(id: string) {
             required
         /></label>
         <label
-          >Every (tasks)<input
+          >{{ t('Every (tasks)')
+          }}<input
             :disabled="!access.canEdit"
             v-model.number="breakEvery"
             type="number"
@@ -79,8 +83,8 @@ function openFocus(id: string) {
         /></label>
       </div>
       <fieldset>
-        <legend>Tasks</legend>
-        <p v-if="!tasks.remaining" class="help">Add a task to begin.</p>
+        <legend>{{ t('Tasks') }}</legend>
+        <p v-if="!tasks.remaining" class="help">{{ t('Add a task to begin.') }}</p>
         <label
           v-for="task in tasks.tasks.filter((t) => !t.completed)"
           :key="task.id"
@@ -94,7 +98,7 @@ function openFocus(id: string) {
             :value="task.id"
           />
           <AppIcon :name="task.category" /><span>{{ task.title }}</span
-          ><small>{{ task.priority }} · {{ task.duration }} min</small>
+          ><small>{{ t(task.priority) }} · {{ t(task.duration) }}{{ t(' min') }}</small>
         </label>
       </fieldset>
       <button
@@ -102,45 +106,55 @@ function openFocus(id: string) {
         class="generate primary"
         :disabled="!access.canEdit || !planner.settings.selectedIds.length"
       >
-        Plan session<AppIcon name="arrow" />
+        {{ t(' Plan session') }}<AppIcon name="arrow" />
       </button>
-      <button v-if="shown" type="button" class="quiet" @click="editing = false">Cancel</button>
+      <button v-if="shown" type="button" class="quiet" @click="editing = false">
+        {{ t('Cancel') }}
+      </button>
     </form>
     <p v-if="planner.error || planNotice" role="status" class="help notice">
-      {{ planner.error || planNotice }}
+      {{ t(planner.error || planNotice) }}
     </p>
-    <section v-if="shown && !editing" aria-label="Session schedule">
+    <section v-if="shown && !editing" :aria-label="t('Session schedule')">
       <div class="section-heading">
-        <h3>{{ planner.proposal ? 'Proposed schedule' : 'Accepted session' }}</h3>
+        <h3>{{ t(planner.proposal ? 'Proposed schedule' : 'Accepted session') }}</h3>
         <button
           :disabled="!access.canEdit"
           type="button"
           class="edit-plan"
           @click="editing = true"
-          aria-label="Edit plan settings"
+          :aria-label="t('Edit plan settings')"
         >
           <AppIcon name="edit" />
         </button>
       </div>
       <div class="plan-summary">
         <div class="metric">
-          <span class="metric-label">Planned</span
-          ><span class="metric-value">{{ shown.schedule.total }} <small>min</small></span>
+          <span class="metric-label">{{ t('Planned') }}</span
+          ><span class="metric-value"
+            >{{ t(shown.schedule.total) }} <small>{{ t('min') }}</small></span
+          >
         </div>
         <div class="metric">
-          <span class="metric-label">Breaks</span
-          ><span class="metric-value">{{ shown.schedule.breaks }} <small>min</small></span>
+          <span class="metric-label">{{ t('Breaks') }}</span
+          ><span class="metric-value"
+            >{{ t(shown.schedule.breaks) }} <small>{{ t('min') }}</small></span
+          >
         </div>
         <div class="metric">
-          <span class="metric-label">Free</span
-          ><span class="metric-value">{{ shown.schedule.free }} <small>min</small></span>
+          <span class="metric-label">{{ t('Free') }}</span
+          ><span class="metric-value"
+            >{{ t(shown.schedule.free) }} <small>{{ t('min') }}</small></span
+          >
         </div>
       </div>
-      <p v-if="shown.startedAt" class="help">{{ remaining }} min left</p>
+      <p v-if="shown.startedAt" class="help">{{ t(remaining) }}{{ t(' min left') }}</p>
       <p v-if="planner.overrun" role="status" class="help">
-        Over time. Recalculate to reserve 5 more minutes.
+        {{ t(' Over time. Recalculate to reserve 5 more minutes. ') }}
       </p>
-      <p v-if="shown.completedIds.length" class="help">{{ shown.completedIds.length }} completed</p>
+      <p v-if="shown.completedIds.length" class="help">
+        {{ t(shown.completedIds.length) }}{{ t(' completed') }}
+      </p>
       <ol class="schedule">
         <li
           v-for="(slot, index) in shown.schedule.slots"
@@ -151,15 +165,18 @@ function openFocus(id: string) {
           }"
         >
           <span class="time"
-            >{{ shown.offset + slot.start }}–{{ shown.offset + slot.end }} min</span
+            >{{ t(shown.offset + slot.start) }}–{{ t(shown.offset + slot.end)
+            }}{{ t(' min') }}</span
           >
           <span
-            >{{ slot.title }}<small v-if="slot.learned"> · Learned estimate</small
-            ><small v-if="slot.taskId && shown.completedIds.includes(slot.taskId)">
-              · Completed</small
-            ><small v-else-if="slot.taskId && !tasks.tasks.some((t) => t.id === slot.taskId)">
-              · Deleted</small
-            ></span
+            >{{ slot.kind === 'break' ? t(slot.title) : slot.title
+            }}<small v-if="slot.learned">{{ t(' · Learned estimate') }}</small
+            ><small v-if="slot.taskId && shown.completedIds.includes(slot.taskId)">{{
+              t(' · Completed')
+            }}</small
+            ><small v-else-if="slot.taskId && !tasks.tasks.some((t) => t.id === slot.taskId)">{{
+              t(' · Deleted')
+            }}</small></span
           >
           <button
             v-if="
@@ -170,38 +187,40 @@ function openFocus(id: string) {
             "
             type="button"
             :disabled="!access.canEdit || remaining <= 0"
-            :aria-label="`Focus on planned ${slot.title}`"
+            :aria-label="t(`Focus on planned ${slot.title}`)"
             @click="openFocus(slot.taskId)"
           >
-            Focus
+            {{ t(' Focus ') }}
           </button>
         </li>
       </ol>
-      <p v-if="!shown.schedule.slots.length" class="help">No tasks fit this budget.</p>
+      <p v-if="!shown.schedule.slots.length" class="help">{{ t('No tasks fit this budget.') }}</p>
       <div v-if="shown.schedule.omitted.length" class="unscheduled">
-        <h3>Unscheduled · {{ shown.schedule.omitted.length }}</h3>
+        <h3>{{ t('Unscheduled · ') }}{{ t(shown.schedule.omitted.length) }}</h3>
         <ul>
           <li v-for="item in shown.schedule.omitted" :key="item.taskId">
-            {{ item.title }} — {{ item.reason }}
+            {{ item.title }} — {{ t(item.reason) }}
           </li>
         </ul>
       </div>
       <div class="actions" v-if="planner.proposal">
         <button :disabled="!access.canEdit" type="button" class="primary" @click="planner.accept()">
-          Accept plan
+          {{ t(' Accept plan ') }}
         </button>
-        <button :disabled="!access.canEdit" type="button" @click="planner.reject">Discard</button>
+        <button :disabled="!access.canEdit" type="button" @click="planner.reject">
+          {{ t('Discard') }}
+        </button>
       </div>
       <div class="actions" v-else>
         <button :disabled="!access.canEdit" type="button" @click="planner.generate(true)">
-          Recalculate
+          {{ t(' Recalculate ') }}
         </button>
       </div>
     </section>
-    <section class="method" aria-label="Planning details">
-      <h3>Details</h3>
-      <p>Priority first, then task order. Estimates leave your timer unchanged.</p>
-      <p>Breaks are manual. Pauses use session time. Open Focus to start.</p>
+    <section class="method" :aria-label="t('Planning details')">
+      <h3>{{ t('Details') }}</h3>
+      <p>{{ t('Priority first, then task order. Estimates leave your timer unchanged.') }}</p>
+      <p>{{ t('Breaks are manual. Pauses use session time. Open Focus to start.') }}</p>
     </section>
   </div>
 </template>

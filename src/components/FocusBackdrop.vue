@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { workspaceRail } from '@/visuals/workspaceRail'
 import { advanceLight } from '@/visuals/lightMotion'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 
@@ -6,7 +7,7 @@ const props = withDefaults(
   defineProps<{
     mode?: 'focus' | 'list' | 'form' | 'workspace'
     running?: boolean
-    workspaceView?: 'Planner' | 'Analytics'
+    workspaceView?: 'Planner' | 'Analytics' | 'Appearance' | 'Data'
     compact?: boolean
     welcome?: boolean
   }>(),
@@ -16,6 +17,8 @@ const id = useId()
 const root = ref<HTMLElement>()
 // One curve, one position, one animation clock. All optical layers share its geometry.
 type Light = {
+  rail: number
+  railWeight: number
   x: number
   y: number
   width: number
@@ -29,6 +32,8 @@ type Light = {
   opening: number
 }
 const light = ref<Light>({
+  rail: 0,
+  railWeight: 0,
   x: 0,
   y: 0,
   width: 400,
@@ -40,6 +45,11 @@ const light = ref<Light>({
   radiance: 0,
   form: 0,
   opening: 0,
+})
+const sourceTransform = computed(() => {
+  const offset = workspaceRail(light.value.rail)
+  const weight = light.value.railWeight
+  return `translate(${light.value.x + offset.x * weight} ${light.value.y + offset.y * weight}) rotate(${light.value.angle + offset.angle * weight})`
 })
 let frame = 0
 let settle: ReturnType<typeof setTimeout> | undefined
@@ -148,7 +158,7 @@ function locate() {
   const cx = panel ? panel.left + panel.width / 2 - bounds.left : w / 2
   const cy = panel ? panel.top + panel.height / 2 - bounds.top : h / 2
   const compact = w < 600
-  let pose: Omit<Light, 'concentration' | 'radiance' | 'form' | 'opening'>
+  let pose: Omit<Light, 'concentration' | 'radiance' | 'form' | 'opening' | 'rail' | 'railWeight'>
   const bottom = panel ? panel.bottom - bounds.top : h * 0.72
   if (props.mode === 'focus') {
     // The light is a landscape behind the interface, not an object fitted into
@@ -165,26 +175,15 @@ function locate() {
       power: props.running ? 0.96 : 0.88,
     }
   } else if (props.mode === 'workspace') {
-    const analytics = props.workspaceView === 'Analytics'
-    pose = analytics
-      ? {
-          x: cx,
-          y: bottom - 120,
-          width: Math.min(w * 0.94, panel.width + 300),
-          bend: 145,
-          depth: 220,
-          angle: 0,
-          power: 0.9,
-        }
-      : {
-          x: cx,
-          y: bottom - 8,
-          width: Math.min(w * 0.85, 630),
-          bend: 8,
-          depth: 185,
-          angle: 0,
-          power: 0.65,
-        }
+    pose = {
+      x: cx,
+      y: bottom - 110,
+      width: Math.min(w * 0.9, 700),
+      bend: 170,
+      depth: props.workspaceView === 'Data' ? 205 : 230,
+      angle: 0,
+      power: 0.85,
+    }
   } else if (props.mode === 'form' && props.welcome) {
     // Match the approved welcome bow in viewport coordinates. Both forms and
     // the list now keep this same source alive across panel transitions.
@@ -247,17 +246,19 @@ function locate() {
   }
   const destination: Light = {
     ...pose,
+    rail:
+      props.mode === 'workspace'
+        ? props.workspaceView === 'Planner'
+          ? -1
+          : props.workspaceView === 'Analytics'
+            ? 0
+            : 1
+        : light.value.rail,
+    railWeight: props.mode === 'workspace' ? 1 : 0,
     form: props.mode === 'form' ? 1 : 0,
     opening: props.compact ? 0 : 1,
-    radiance: props.mode === 'focus' ? 1 : props.workspaceView === 'Analytics' ? 0.45 : 0,
-    concentration:
-      props.mode === 'list'
-        ? 0.72
-        : props.mode === 'workspace'
-          ? props.workspaceView === 'Analytics'
-            ? 0.5
-            : 0.3
-          : 0,
+    radiance: props.mode === 'focus' ? 1 : props.mode === 'workspace' ? 0.45 : 0,
+    concentration: props.mode === 'list' ? 0.72 : props.mode === 'workspace' ? 0.5 : 0,
   }
   if (
     interaction?.isConnected &&
@@ -265,7 +266,7 @@ function locate() {
     interaction.closest(selector) &&
     props.mode !== 'focus' &&
     props.mode !== 'form' &&
-    props.workspaceView !== 'Analytics'
+    props.mode !== 'workspace'
   ) {
     const rect = interaction.getBoundingClientRect()
     destination.y += Math.max(
@@ -522,82 +523,92 @@ const geometry = computed(() => {
           <feGaussianBlur :stdDeviation="blur" />
         </filter>
       </defs>
-      <g
-        :transform="`translate(${light.x} ${light.y}) rotate(${light.angle})`"
-        :opacity="light.power"
-      >
-        <g v-if="light.form > 0" :opacity="light.form" :mask="`url(#${id}-form-mask)`">
-          <path
-            :d="geometry.body"
-            :fill="`url(#${id}-form-volume)`"
-            style="filter: blur(40px)"
-            :opacity="0.55 + light.opening * 0.13"
-          />
-          <path
-            :d="geometry.body"
-            :fill="`url(#${id}-form-volume)`"
-            :style="{ filter: `blur(${9 - light.opening}px)` }"
-            :opacity="0.7 + light.opening * 0.2"
-          />
-          <path
-            :d="geometry.lip"
-            fill="none"
-            :stroke="`url(#${id}-form-rim)`"
-            :stroke-width="1 + light.opening"
-            :style="{ filter: `blur(${2 + light.opening * 0.5}px)` }"
-            :opacity="0.4 + light.opening * 0.15"
-          />
-        </g>
-        <g v-if="light.form < 1" :opacity="1 - light.form">
-          <!-- The air, bloom and aperture all emit from the same filled shape. -->
-          <path
-            :d="geometry.body"
-            :fill="`url(#${id}-air-color)`"
-            :filter="`url(#${id}-air)`"
-            :opacity="0.52 + light.radiance * 0.23"
-          />
-          <path
-            :d="geometry.body"
-            :fill="`url(#${id}-volume)`"
-            :filter="`url(#${id}-bloom)`"
-            opacity=".45"
-          />
-          <g :clip-path="`url(#${id}-aperture)`" :mask="`url(#${id}-falloff)`">
-            <path :d="geometry.body" :fill="`url(#${id}-volume)`" :filter="`url(#${id}-soft)`" />
+      <g :transform="sourceTransform" :opacity="light.power">
+        <g
+          class="light-emission radiant-emission"
+          :style="{ transformOrigin: `0px ${light.bend}px` }"
+        >
+          <g v-if="light.form > 0" :opacity="light.form" :mask="`url(#${id}-form-mask)`">
+            <path
+              :d="geometry.body"
+              :fill="`url(#${id}-form-volume)`"
+              style="filter: blur(40px)"
+              :opacity="0.55 + light.opening * 0.13"
+            />
+            <path
+              :d="geometry.body"
+              :fill="`url(#${id}-form-volume)`"
+              :style="{ filter: `blur(${9 - light.opening}px)` }"
+              :opacity="0.7 + light.opening * 0.2"
+            />
+            <path
+              :d="geometry.lip"
+              fill="none"
+              :stroke="`url(#${id}-form-rim)`"
+              :stroke-width="1 + light.opening"
+              :style="{ filter: `blur(${2 + light.opening * 0.5}px)` }"
+              :opacity="0.4 + light.opening * 0.15"
+            />
           </g>
-          <!-- A soft caustic follows the same aperture edge, giving the wide
+          <g v-if="light.form < 1" :opacity="1 - light.form">
+            <g class="radiant-atmosphere" :style="{ transformOrigin: `0px ${light.bend}px` }">
+              <!-- The air, bloom and aperture all emit from the same filled shape. -->
+              <path
+                :d="geometry.body"
+                :fill="`url(#${id}-air-color)`"
+                :filter="`url(#${id}-air)`"
+                :opacity="0.52 + light.radiance * 0.23"
+              />
+              <path
+                :d="geometry.body"
+                :fill="`url(#${id}-volume)`"
+                :filter="`url(#${id}-bloom)`"
+                opacity=".45"
+              />
+              <g :clip-path="`url(#${id}-aperture)`" :mask="`url(#${id}-falloff)`">
+                <path
+                  :d="geometry.body"
+                  :fill="`url(#${id}-volume)`"
+                  :filter="`url(#${id}-soft)`"
+                />
+              </g>
+            </g>
+            <g class="radiant-core">
+              <!-- A soft caustic follows the same aperture edge, giving the wide
              focus source a luminous lip without introducing another light. -->
-          <path
-            :d="geometry.lip"
-            fill="none"
-            :stroke="`url(#${id}-rim)`"
-            :filter="`url(#${id}-edge)`"
-            stroke-width="5"
-            :opacity="light.radiance * 0.55"
-          />
-          <path
-            :d="geometry.lip"
-            fill="none"
-            :stroke="`url(#${id}-rim)`"
-            stroke-width=".8"
-            opacity=".72"
-          />
-        </g>
-        <g v-if="passage < 1" :opacity="Math.sin(Math.PI * passage) ** 2">
-          <path
-            :d="geometry.body"
-            :fill="`url(#${id}-passage)`"
-            style="filter: blur(18px)"
-            opacity=".45"
-          />
-          <path
-            :d="geometry.lip"
-            fill="none"
-            :stroke="`url(#${id}-passage)`"
-            stroke-width="4"
-            style="filter: blur(4px)"
-            opacity=".65"
-          />
+              <path
+                :d="geometry.lip"
+                fill="none"
+                :stroke="`url(#${id}-rim)`"
+                :filter="`url(#${id}-edge)`"
+                stroke-width="5"
+                :opacity="light.radiance * 0.55"
+              />
+              <path
+                :d="geometry.lip"
+                fill="none"
+                :stroke="`url(#${id}-rim)`"
+                stroke-width=".8"
+                opacity=".72"
+              />
+            </g>
+          </g>
+          <g v-if="passage < 1" :opacity="Math.sin(Math.PI * passage) ** 2">
+            <path
+              :d="geometry.body"
+              :fill="`url(#${id}-passage)`"
+              style="filter: blur(18px)"
+              opacity=".45"
+            />
+            <path
+              :d="geometry.lip"
+              fill="none"
+              :stroke="`url(#${id}-passage)`"
+              stroke-width="4"
+              style="filter: blur(4px)"
+              opacity=".65"
+            />
+          </g>
         </g>
       </g>
     </svg>

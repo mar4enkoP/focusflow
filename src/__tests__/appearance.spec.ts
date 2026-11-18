@@ -43,15 +43,22 @@ describe('appearance preferences', () => {
     expect(store.theme).toBe('1')
     expect(store.notice).toContain('сохранить')
   })
-  it('offers both themes without hiding the current screen and restores focus on Escape', async () => {
+  it('offers both themes in settings and restores focus on Escape', async () => {
     const wrapper = mount(WorkspaceTools, { attachTo: document.body })
     try {
-      const opener = wrapper.get('button[aria-label="Тема"]')
+      const opener = wrapper.get('button[aria-label="Settings"]')
       await opener.trigger('click')
-      expect(wrapper.emitted('active')?.slice(-1)[0]).toEqual([false, undefined])
+      expect(wrapper.emitted('active')?.slice(-1)[0]).toEqual([true, 'Appearance'])
       await wrapper.get('input[value="1"]').setValue(true)
       expect(useAppearanceStore().theme).toBe('1')
       expect(wrapper.get('input[value="1"]').element).toHaveProperty('checked', true)
+      await wrapper
+        .findAll('aside button')
+        .find((button) => button.text() === 'Data & recovery')!
+        .trigger('click')
+      expect(wrapper.emitted('active')?.slice(-1)[0]).toEqual([true, 'Data'])
+      expect(wrapper.text()).toContain('Export JSON')
+      expect(wrapper.find('input[name="light-theme"]').exists()).toBe(false)
       await wrapper.get('[role="dialog"]').trigger('keydown', { key: 'Escape' })
       expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
       expect(document.activeElement).toBe(opener.element)

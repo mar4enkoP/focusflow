@@ -22,6 +22,37 @@ export const useTimerStore = defineStore('timer', () => {
     budget.value ? Math.min(100, Math.max(0, 100 * (1 - remaining.value / budget.value))) : 0,
   )
   const saved = new Map<string, { remaining: number; budget: number }>()
+  // React to explicit edits only; hydration restores its own timer snapshot.
+  tasks.$onAction(({ name, args, after }) => {
+    if (name !== 'save') return
+    const [input, id] = args
+    const previous = tasks.tasks.find((item) => item.id === id)
+    if (!previous || previous.duration === input.duration) return
+    after((success) => {
+      if (!success || !access.canMutate || !id) return
+      access.batch(() => {
+        const nextBudget = input.duration * 60000
+        if (selectedId.value === id) {
+          sync()
+          const elapsed = Math.max(0, budget.value - remaining.value)
+          budget.value = nextBudget
+          remaining.value = Math.max(0, nextBudget - elapsed)
+          if (state.value === 'running' && remaining.value > 0)
+            deadline.value = Date.now() + remaining.value
+          else if (!remaining.value) {
+            deadline.value = undefined
+            state.value = 'expired'
+          } else if (state.value === 'expired') state.value = 'paused'
+        }
+        const cached = saved.get(id)
+        if (cached)
+          saved.set(id, {
+            budget: nextBudget,
+            remaining: Math.max(0, nextBudget - (cached.budget - cached.remaining)),
+          })
+      })
+    })
+  })
   function sync() {
     if (!access.canMutate) return false
     const now = Date.now()

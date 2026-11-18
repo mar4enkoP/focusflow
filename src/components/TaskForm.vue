@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 import { useWorkspaceAccessStore } from '@/stores/workspaceAccess'
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { categories, priorities, validateTask, type Task, type TaskInput } from '@/stores/tasks'
@@ -195,11 +196,14 @@ async function submit() {
       >
         <Transition name="hint" mode="out-in">
           <span v-if="errors.title" key="error" class="welcome-error">{{
-            errors.title.replace(/\.$/, '')
+            t(errors.title.replace(/\.$/, ''))
           }}</span>
-          <span v-else key="guidance" class="welcome-guidance">
-            Type a task name, then press
-            <kbd aria-label="Enter"><span>Enter</span><span aria-hidden="true">↵</span></kbd>
+          <span v-else key="guidance" class="welcome-guidance"
+            >{{ t(' Type a task name, then press ')
+            }}<kbd :aria-label="t('Enter')"
+              ><span>{{ t('Enter') }}</span
+              ><span aria-hidden="true">↵</span></kbd
+            >
           </span>
         </Transition>
       </p>
@@ -211,7 +215,7 @@ async function submit() {
     >
       <div class="details">
         <div>
-          <label for="task-duration" data-form-part>Estimated minutes</label>
+          <label for="task-duration" data-form-part>{{ t('Estimated minutes') }}</label>
           <div class="field duration-field" data-form-part>
             <AppIcon name="clock" /><input
               :disabled="!access.canEdit"
@@ -225,11 +229,11 @@ async function submit() {
               step="1"
               :aria-invalid="!!errors.duration"
               :aria-describedby="errors.duration ? 'duration-error' : undefined"
-            /><span class="duration-unit" aria-hidden="true">min</span>
+            /><span class="duration-unit" aria-hidden="true">{{ t('min') }}</span>
           </div>
         </div>
         <div>
-          <label for="task-category" data-form-part>Category</label>
+          <label for="task-category" data-form-part>{{ t('Category') }}</label>
           <div
             ref="categoryRoot"
             class="category-picker"
@@ -242,7 +246,7 @@ async function submit() {
               type="button"
               class="field category-trigger"
               data-form-part
-              aria-label="Category"
+              :aria-label="t('Category')"
               aria-haspopup="listbox"
               :aria-expanded="categoryOpen"
               aria-controls="category-options"
@@ -250,7 +254,7 @@ async function submit() {
               @keydown.down.prevent="openCategory()"
               @keydown.up.prevent="openCategory()"
             >
-              <AppIcon :name="input.category" /><span>{{ input.category }}</span
+              <AppIcon :name="input.category" /><span>{{ t(input.category) }}</span
               ><AppIcon name="down" />
             </button>
             <Transition name="panel">
@@ -260,7 +264,7 @@ async function submit() {
                 id="category-options"
                 class="category-options"
                 role="listbox"
-                aria-label="Task category"
+                :aria-label="t('Task category')"
                 @keydown="categoryKey"
               >
                 <button
@@ -273,7 +277,7 @@ async function submit() {
                   :tabindex="categoryIndex === index ? 0 : -1"
                   @click="chooseCategory(index)"
                 >
-                  <AppIcon :name="category" /><span>{{ category }}</span>
+                  <AppIcon :name="category" /><span>{{ t(category) }}</span>
                   <span v-if="input.category === category" class="selected-mark" aria-hidden="true"
                     >&#10003;</span
                   >
@@ -284,17 +288,18 @@ async function submit() {
         </div>
       </div>
       <p v-if="errors.duration" id="duration-error" class="error" data-form-part>
-        {{ errors.duration }}
+        {{ t(errors.duration) }}
       </p>
       <p v-if="estimate?.learned" class="estimate-help" data-form-part>
-        Suggested: {{ estimate.minutes }} min · Based on {{ estimate.count }} completed sessions.
-        <button :disabled="!access.canEdit" type="button" class="quiet" @click="applyEstimate">
-          Use estimate
+        {{ t(' Suggested: ') }}{{ t(estimate.minutes) }}{{ t(' min · Based on ')
+        }}{{ t(estimate.count) }}{{ t(' completed sessions. ')
+        }}<button :disabled="!access.canEdit" type="button" class="quiet" @click="applyEstimate">
+          {{ t(' Use estimate ') }}
         </button>
       </p>
-      <p v-if="errors.category" class="error" data-form-part>{{ errors.category }}</p>
+      <p v-if="errors.category" class="error" data-form-part>{{ t(errors.category) }}</p>
       <fieldset class="priority-picker">
-        <legend data-form-part>Priority</legend>
+        <legend data-form-part>{{ t('Priority') }}</legend>
         <div class="priority-options" data-form-part>
           <label v-for="priority in priorities" :key="priority">
             <input
@@ -304,22 +309,22 @@ async function submit() {
               name="priority"
               :value="priority"
             />
-            <span>{{ priority }}</span>
+            <span>{{ t(priority) }}</span>
           </label>
         </div>
       </fieldset>
-      <p v-if="errors.priority" class="error" data-form-part>{{ errors.priority }}</p>
+      <p v-if="errors.priority" class="error" data-form-part>{{ t(errors.priority) }}</p>
       <div class="actions" :class="{ 'single-action': welcome }">
         <button :disabled="!access.canEdit" type="submit" class="primary" data-form-part>
-          {{ task ? 'Save changes' : 'Add task' }}<AppIcon name="arrow" />
+          {{ t(task ? 'Save changes' : 'Add task') }}<AppIcon name="arrow" />
         </button>
         <button v-if="!welcome" type="button" class="quiet" data-form-part @click="emit('cancel')">
-          Cancel
+          {{ t(' Cancel ') }}
         </button>
       </div>
       <p v-if="welcome" class="completion-hint" data-form-part>
-        <span>Choose your details, then press</span>
-        <span class="hint-action">Add task<AppIcon name="arrow" /></span>
+        <span>{{ t('Choose your details, then press') }}</span>
+        <span class="hint-action">{{ t('Add task') }}<AppIcon name="arrow" /></span>
       </p>
     </div>
   </form>

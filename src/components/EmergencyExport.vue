@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 import { ref } from 'vue'
 import { getActivePinia } from 'pinia'
 import { downloadEmergencyExport } from '../emergencyExport'
+defineProps<{ embedded?: boolean }>()
 const pinia = getActivePinia()
 const notice = ref('')
 function download() {
@@ -17,9 +19,9 @@ function download() {
 }
 </script>
 <template>
-  <div class="recovery-export">
-    <button type="button" @click="download">Export recovery JSON</button>
-    <p role="status">{{ notice }}</p>
+  <div class="recovery-export" :class="{ embedded }">
+    <button type="button" @click="download">{{ t('Export recovery JSON') }}</button>
+    <p role="status">{{ t(notice) }}</p>
   </div>
 </template>
 <style scoped>
@@ -39,5 +41,16 @@ p {
 }
 p:empty {
   display: none;
+}
+.recovery-export.embedded {
+  position: static;
+  max-width: none;
+  padding: 0;
+  text-align: left;
+}
+.embedded p {
+  font-size: 12px;
+  line-height: 1.6;
+  margin-top: 16px;
 }
 </style>

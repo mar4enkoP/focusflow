@@ -1,4 +1,5 @@
 ﻿<script setup lang="ts">
+import { t } from '@/i18n'
 import { useWorkspaceAccessStore } from '@/stores/workspaceAccess'
 import { nextTick, ref } from 'vue'
 import { useTasksStore, type Task } from '@/stores/tasks'
@@ -64,11 +65,11 @@ function drag(event: DragEvent, id: string) {
 defineEmits<{ edit: [task: Task]; select: [id: string] }>()
 </script>
 <template>
-  <p class="reorder-status" role="status" aria-live="polite">{{ announcement }}</p>
+  <p class="reorder-status" role="status" aria-live="polite">{{ t(announcement) }}</p>
   <ol
     ref="list"
     class="tasks"
-    aria-label="Task list"
+    :aria-label="t('Task list')"
     @dragleave="
       !($event.currentTarget as HTMLElement).contains($event.relatedTarget as Node) &&
       (target = undefined)
@@ -94,8 +95,8 @@ defineEmits<{ edit: [task: Task]; select: [id: string] }>()
         class="drag-handle"
         :draggable="access.canEdit"
         @dragstart="drag($event, task.id)"
-        :aria-label="`Reorder ${task.title}; use arrow keys`"
-        title="Drag to reorder; Arrow keys to move"
+        :aria-label="t(`Reorder ${task.title}; use arrow keys`)"
+        :title="t('Drag to reorder; Arrow keys to move')"
         @keydown.up.prevent="move(task.id, -1)"
         @keydown.down.prevent="move(task.id, 1)"
       >
@@ -114,7 +115,7 @@ defineEmits<{ edit: [task: Task]; select: [id: string] }>()
         :disabled="!access.canEdit"
         type="checkbox"
         :checked="task.completed"
-        :aria-label="`Complete ${task.title}`"
+        :aria-label="t(`Complete ${task.title}`)"
         @change="store.toggle(task.id)"
       />
       <AppIcon :name="task.category" />
@@ -122,14 +123,15 @@ defineEmits<{ edit: [task: Task]; select: [id: string] }>()
         <button
           class="select-task"
           :disabled="!access.canEdit || task.completed"
-          :aria-label="`Focus on ${task.title}`"
+          :aria-label="t(`Focus on ${task.title}`)"
           @click="$emit('select', task.id)"
         >
           {{ task.title }}</button
         ><span class="metadata"
-          >{{ task.duration }} min<span v-if="task.completed"> &middot; Completed</span
-          ><span :aria-label="`${task.priority} priority`">
-            &middot; {{ task.priority }}</span
+          >{{ t(task.duration) }}{{ t(' min')
+          }}<span v-if="task.completed">{{ t(' · Completed') }}</span
+          ><span :aria-label="t(`${task.priority} priority`)">
+            &middot; {{ t(task.priority) }}</span
           ></span
         >
       </div>
@@ -137,8 +139,8 @@ defineEmits<{ edit: [task: Task]; select: [id: string] }>()
         <button
           :disabled="!access.canEdit"
           class="icon-button"
-          :aria-label="`Edit ${task.title}`"
-          title="Edit task"
+          :aria-label="t(`Edit ${task.title}`)"
+          :title="t('Edit task')"
           @click="$emit('edit', task)"
         >
           <AppIcon name="edit" />
@@ -146,8 +148,8 @@ defineEmits<{ edit: [task: Task]; select: [id: string] }>()
         <button
           :disabled="!access.canEdit"
           class="icon-button delete"
-          :aria-label="`Delete ${task.title}`"
-          title="Delete task"
+          :aria-label="t(`Delete ${task.title}`)"
+          :title="t('Delete task')"
           @click="deletion.remove(task.id)"
         >
           <AppIcon name="trash" />

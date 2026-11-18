@@ -2,9 +2,26 @@
 import { computed, onBeforeUnmount, watch, useId, ref } from 'vue'
 
 const props = withDefaults(
-  defineProps<{ mode?: 'focus' | 'list' | 'form' | 'workspace'; running?: boolean }>(),
+  defineProps<{
+    mode?: 'focus' | 'list' | 'form' | 'workspace'
+    arriving?: boolean
+    running?: boolean
+    workspaceView?: 'Planner' | 'Analytics' | 'Appearance' | 'Data'
+  }>(),
   { mode: 'focus', running: false },
 )
+// Keep the completed animation attached: removing it on the parent's timer can
+// truncate the final frame, especially under load or at different zoom levels.
+const traceArrival = ref(false)
+watch(
+  () => [props.arriving, props.mode] as const,
+  ([arriving, mode]) => {
+    if (mode !== 'list') traceArrival.value = false
+    else if (arriving) traceArrival.value = true
+  },
+  { immediate: true },
+)
+const isCircle = computed(() => props.mode === 'list' || props.mode === 'form')
 const gradientId = useId()
 const interiorId = useId()
 const focusGradientId = useId()
@@ -17,7 +34,7 @@ const lift = ref(props.mode === 'focus' && props.running ? 1 : 0)
 let frame: number | undefined
 
 watch(
-  () => [props.mode, props.running] as const,
+  () => [props.mode, props.running, props.workspaceView] as const,
   ([mode, running]) => {
     if (frame !== undefined) cancelAnimationFrame(frame)
     const target = mode === 'focus' || mode === 'workspace' ? 0 : 1
@@ -63,12 +80,20 @@ const curve = computed(() => {
     const y = curvedY + (800 - curvedY) * flat.value
     return `${index ? 'L' : 'M'}${x.toFixed(3)},${y.toFixed(3)}`
   }).join(' ')
-  return amount === 1 ? `${path} Z` : path
+  return amount === 1
+    ? 'M796.985 203.015 A420 420 0 1 1 203.015 796.985 A420 420 0 1 1 796.985 203.015 Z'
+    : path
 })
 </script>
 
 <template>
-  <div class="focus-backdrop" :data-mode="mode" :data-running="running" aria-hidden="true">
+  <div
+    class="focus-backdrop"
+    :class="{ 'list-arrival': traceArrival }"
+    :data-mode="mode"
+    :data-running="running"
+    aria-hidden="true"
+  >
     <svg class="horizon" viewBox="0 0 1000 1000" preserveAspectRatio="none">
       <defs>
         <linearGradient :id="gradientId" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -99,7 +124,9 @@ const curve = computed(() => {
           <stop offset="100%" stop-color="#8b102b" stop-opacity="0" />
         </linearGradient>
         <clipPath :id="interiorId">
-          <path :d="flat > 0 ? `${curve} L1000,-500 L0,-500 Z` : `${curve} Z`" />
+          <!-- The closing circle must clip to its own contour. The horizon's
+               remote top corners create a triangular light leak as its ends meet. -->
+          <path :d="!isCircle && flat > 0 ? `${curve} L1000,-500 L0,-500 Z` : `${curve} Z`" />
         </clipPath>
         <linearGradient :id="fadeId" x1="0" y1="0" x2="0" y2="1000" gradientUnits="userSpaceOnUse">
           <stop offset="20%" stop-color="white" stop-opacity="0" />
@@ -140,44 +167,63 @@ const curve = computed(() => {
           <feGaussianBlur stdDeviation="4 24" />
         </filter>
       </defs>
-      <g :stroke="`url(#${gradientId})`" fill="none" stroke-linecap="round" :opacity="bend">
-        <path class="halo" :d="curve" vector-effect="non-scaling-stroke" />
-        <path class="band" :d="curve" vector-effect="non-scaling-stroke" />
-        <path class="edge" :d="curve" vector-effect="non-scaling-stroke" />
-      </g>
-      <g
-        :stroke="`url(#${focusGradientId})`"
-        fill="none"
-        stroke-linecap="round"
-        :opacity="1 - bend"
-        :mask="`url(#${maskId})`"
-      >
-        <path class="focus-spill" :d="curve" vector-effect="non-scaling-stroke" />
-        <!-- Confine the broad light to the inside of the curve, like the reference horizon. -->
-        <g :clip-path="`url(#${interiorId})`">
+      <g class="light-emission" style="transform-origin: 500px 800px">
+        <g :stroke="`url(#${gradientId})`" fill="none" stroke-linecap="round" :opacity="bend">
+          <g :clip-path="isCircle ? `url(#${interiorId})` : undefined">
+            <path
+              class="halo"
+              pathLength="100"
+              :d="curve"
+              :vector-effect="isCircle ? undefined : 'non-scaling-stroke'"
+            />
+            <path
+              class="band"
+              pathLength="100"
+              :d="curve"
+              :vector-effect="isCircle ? undefined : 'non-scaling-stroke'"
+            />
+          </g>
           <path
-            class="focus-halo"
-            :style="{ strokeWidth: `${180 + 140 * lift}px`, opacity: 0.28 + 0.14 * lift }"
+            class="edge"
+            pathLength="100"
             :d="curve"
-            :filter="`url(#${blurId}-halo)`"
-            vector-effect="non-scaling-stroke"
-          />
-          <path
-            class="focus-band"
-            :style="{ strokeWidth: `${84 + 80 * lift}px`, opacity: 0.7 + 0.2 * lift }"
-            :d="curve"
-            :filter="`url(#${blurId}-band)`"
-            vector-effect="non-scaling-stroke"
-          />
-          <path
-            class="focus-core"
-            :style="{ strokeWidth: `${28 + 24 * lift}px` }"
-            :d="curve"
-            :filter="`url(#${blurId}-core)`"
-            vector-effect="non-scaling-stroke"
+            :vector-effect="isCircle ? undefined : 'non-scaling-stroke'"
           />
         </g>
-        <path class="focus-edge" :d="curve" vector-effect="non-scaling-stroke" />
+        <g
+          :stroke="`url(#${focusGradientId})`"
+          fill="none"
+          stroke-linecap="round"
+          :opacity="1 - bend"
+          :mask="`url(#${maskId})`"
+        >
+          <path class="focus-spill" :d="curve" vector-effect="non-scaling-stroke" />
+          <!-- Confine the broad light to the inside of the curve, like the reference horizon. -->
+          <g :clip-path="`url(#${interiorId})`">
+            <path
+              class="focus-halo"
+              :style="{ strokeWidth: `${180 + 140 * lift}px`, opacity: 0.28 + 0.14 * lift }"
+              :d="curve"
+              :filter="`url(#${blurId}-halo)`"
+              vector-effect="non-scaling-stroke"
+            />
+            <path
+              class="focus-band"
+              :style="{ strokeWidth: `${84 + 80 * lift}px`, opacity: 0.7 + 0.2 * lift }"
+              :d="curve"
+              :filter="`url(#${blurId}-band)`"
+              vector-effect="non-scaling-stroke"
+            />
+            <path
+              class="focus-core"
+              :style="{ strokeWidth: `${28 + 24 * lift}px` }"
+              :d="curve"
+              :filter="`url(#${blurId}-core)`"
+              vector-effect="non-scaling-stroke"
+            />
+          </g>
+          <path class="focus-edge" :d="curve" vector-effect="non-scaling-stroke" />
+        </g>
       </g>
     </svg>
   </div>
@@ -274,17 +320,77 @@ const curve = computed(() => {
   transform: translate(-50%, calc(50% + 32px));
   opacity: 0.62;
 }
+
+.focus-backdrop[data-mode='list'] .horizon,
 .focus-backdrop[data-mode='form'] .horizon {
-  opacity: 0.54;
-}
-.focus-backdrop[data-mode='list'] .horizon {
   width: min(1052px, calc(100vw - 16px), calc(100svh - 24px));
   height: min(1052px, calc(100vw - 16px), calc(100svh - 24px));
+}
+.focus-backdrop[data-mode='form'] .horizon {
+  transform: translate(-50%, calc(50% + 32px)) scale(0.94);
 }
 .focus-backdrop[data-mode='workspace'] .horizon {
   width: min(2040px, 110vw);
 }
+.focus-backdrop[data-mode='list'],
+.focus-backdrop[data-mode='form'] {
+  background: none;
+  .halo {
+    stroke-width: 84px;
+    opacity: 0.38;
+    filter: blur(22px);
+  }
+  .band {
+    stroke-width: 34px;
+    opacity: 0.75;
+    filter: blur(8px);
+  }
+  .edge {
+    stroke: #ff4935;
+    stroke-width: 2.2px;
+    opacity: 1;
+    filter: none;
+  }
+  &.list-arrival {
+    .edge {
+      animation:
+        trace-circle 2600ms cubic-bezier(0.25, 0.6, 0.3, 1) both,
+        circle-ignite 380ms ease-out both;
+    }
+    .halo,
+    .band {
+      animation:
+        trace-circle 2420ms cubic-bezier(0.25, 0.6, 0.3, 1) 180ms both,
+        circle-ignite 500ms ease-out 180ms both;
+    }
+  }
+}
+@keyframes circle-ignite {
+  from {
+    stroke-opacity: 0;
+  }
+  to {
+    stroke-opacity: 1;
+  }
+}
+@keyframes trace-circle {
+  from {
+    stroke-dasharray: 100;
+    stroke-dashoffset: 100;
+  }
+  to {
+    stroke-dasharray: 100;
+    stroke-dashoffset: 0;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
+  .focus-backdrop[data-mode='list'].list-arrival {
+    .edge,
+    .halo,
+    .band {
+      animation: none;
+    }
+  }
   .horizon {
     transition: none;
   }

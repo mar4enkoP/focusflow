@@ -1,6 +1,10 @@
 ﻿<script setup lang="ts">
 defineProps<{ name: string }>()
 const paths: Record<string, string> = {
+  language: 'M3 5h12M9 3v2M6 5c0 6 3 9 7 11M13 5c0 6-4 10-9 12M13 21l4-11 4 11m-6-4h4',
+  database: 'M20 5c0 4-16 4-16 0s16-4 16 0v14c0 4-16 4-16 0V5m0 7c0 4 16 4 16 0',
+  music: 'M9 18V5l12-2v13M9 8l12-2M9 18a3 3 0 1 1-3-3h3m12 1a3 3 0 1 1-3-3h3',
+  bell: 'M5 16h14l-2-3V8a5 5 0 0 0-10 0v5l-2 3m5 4h4',
   Work: 'M4 4h16v12H4z M2 20h20 M8 16v4m8-4v4',
   Study: 'm3 8 9-5 9 5-9 5-9-5m4 3v6l5 3 5-3v-6',
   Personal: 'M20 21v-2a7 7 0 0 0-14 0v2 M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8',
@@ -19,6 +23,8 @@ const paths: Record<string, string> = {
   play: 'm8 4 12 8-12 8Z',
   pause: 'M6 4h4v16H6z M14 4h4v16h-4z',
   next: 'm5 5 11 7-11 7Z M19 5v14',
+  settings:
+    'M9 3h6l1 3 3 1 2 5-2 5-3 1-1 3H9l-1-3-3-1-2-5 2-5 3-1 1-3Z M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8',
   layers: 'm3 7 9-5 9 5-9 5-9-5m0 5 9 5 9-5M3 17l9 5 9-5',
   chart: 'M4 20V11M10 20V4M16 20v-7M22 20V8',
   close: 'm6 6 12 12M6 18 18 6',

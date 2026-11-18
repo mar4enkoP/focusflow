@@ -24,7 +24,7 @@ test('production CSP blocks injected script and preserves menus, themes and task
   await expect(page.locator('#category-options')).toBeVisible()
   await page.keyboard.press('Escape')
   await page.keyboard.press('Escape')
-  await page.locator('.theme-trigger').click()
+  await page.getByRole('button', { name: 'Settings', exact: true }).click()
   await page.locator('input[name="light-theme"][value="1"]').check()
   await expect(page.locator('input[name="light-theme"][value="1"]')).toBeChecked()
   expect(await page.evaluate(() => localStorage.getItem('focusflow.appearance.v1'))).toBe('1')
