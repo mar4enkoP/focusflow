@@ -1,4 +1,5 @@
 <script setup lang="ts">
+defineProps<{ themeLocked?: boolean }>()
 import { t } from '@/i18n'
 import ThemeSettings from './ThemeSettings.vue'
 import DataSettings from './DataSettings.vue'
@@ -34,6 +35,7 @@ const section = defineModel<'Appearance' | 'Data' | 'Language' | 'Music' | 'Noti
           "
         />
         {{ t(item === 'Data' ? 'Data & recovery' : item) }}
+        <AppIcon v-if="item === 'Appearance' && themeLocked" name="lock" class="section-lock" />
       </button>
     </aside>
     <Transition name="settings-section" mode="out-in">
@@ -52,7 +54,7 @@ const section = defineModel<'Appearance' | 'Data' | 'Language' | 'Music' | 'Noti
           }}
         </h3>
         <template v-if="section === 'Appearance'">
-          <ThemeSettings />
+          <ThemeSettings :theme-locked="themeLocked" />
         </template>
         <DataSettings v-else-if="section === 'Data'" />
         <div v-else-if="section === 'Language'" class="language-options">
@@ -77,6 +79,12 @@ const section = defineModel<'Appearance' | 'Data' | 'Language' | 'Music' | 'Noti
 </template>
 
 <style scoped lang="scss">
+.section-lock {
+  width: 12px;
+  height: 12px;
+  margin-left: auto;
+  color: var(--muted);
+}
 .language-options {
   display: grid;
   gap: 8px;

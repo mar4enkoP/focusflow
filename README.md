@@ -1,167 +1,138 @@
 # FocusFlow
 
-FocusFlow is a minimalist, desktop-first productivity application for organizing
-tasks, focusing on one task at a time, and reviewing recorded work. It runs in the
-browser and stores its workspace locally, without a backend or user account.
+### A little more focus. One task at a time.
 
-## Features
+A calm, browser-based workspace for planning your day, focusing on one task, and
+understanding where your time goes. Built with Vue 3 and TypeScript, with
+glass surfaces and animated lighting that follows your workflow.
 
-- Create, edit, complete, delete, and reorder tasks with estimated duration,
-  category, and priority. Reordering supports dragging and keyboard controls.
-- Start, pause, resume, reset, and extend a task countdown. Reaching zero does not
-  complete the task automatically: focus recording can continue into overtime.
-- Restore tasks, paused timers, and running countdowns from local storage.
-- Reuse remembered task details through title suggestions and manage remembered entries.
-- Receive optional duration estimates based on comparable reliable completed
-  sessions. Estimates remain editable and do not change an existing countdown.
-- Generate and explicitly accept session plans using selected tasks, priorities,
-  available time, and configurable breaks. Recalculate the remaining schedule.
-- View recorded focus time, recent daily activity, categories, completion counts,
-  and planned-versus-actual accuracy in the analytics panel.
-- Use a dedicated focus view with an animated arc that responds to workspace mode
-  and active focus recording.
+**[Try the live demo →](https://focusflow-three-silk.vercel.app/)** ·
+[Watch onboarding](docs/media/onboarding.webm) · [Release changes](CHANGELOG.md)
 
-## Technology and architecture
+[![CI](https://github.com/mar4enkoP/focusflow/actions/workflows/ci.yml/badge.svg)](https://github.com/mar4enkoP/focusflow/actions/workflows/ci.yml)
 
-The application uses Vue 3 Composition API, TypeScript, Pinia, Vite, and SCSS.
-Vitest, Vue Test Utils, and jsdom cover domain and component behavior; Playwright
-provides Chromium browser regression tests. ESLint, Oxlint, and Prettier provide
-static checks and formatting.
+![FocusFlow task workspace with Classic lighting](docs/media/tasks.png)
 
-| Location                                                   | Responsibility                                                                 |
-| ---------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `src/main.ts`, `src/App.vue`                               | Application setup, workspace lifecycle, and top-level views                    |
-| `src/components/`                                          | Task forms and lists, timer, planner, analytics, floating panels, and backdrop |
-| `src/stores/`                                              | Shared task, timer, focus-history, memory, planner, and workspace-access state |
-| `src/persistence.ts`                                       | Versioned storage validation, restoration, and guarded subscriptions           |
-| `src/workspace.ts`, `src/workspaceOwnership.ts`            | Web Lock ownership and page lifecycle coordination                             |
-| `src/estimation.ts`, `src/planning.ts`, `src/analytics.ts` | Estimation, schedule generation, and history aggregation                       |
-| `src/assets/`                                              | Shared visual tokens and foundational styles                                   |
-| `src/__tests__/`, `src/e2e/__tests__/`                     | Unit/component tests and browser tests                                         |
+## From a thought to focused work
 
-Component-only interaction state stays local; shared behavior belongs in stores
-or plain TypeScript modules. See [DESIGN.md](DESIGN.md) for design direction and
-[ROADMAP.md](ROADMAP.md) for planned milestones. The roadmap includes future work
-and is not a list of shipped features.
+Start with a task title. Add an estimate, category, and priority, then open the
+focus timer when you are ready. Your workspace stays in your browser, with no
+account or backend required.
 
-## Requirements and setup
+| Focus on one thing                   | Make the space yours                       |
+| ------------------------------------ | ------------------------------------------ |
+| ![Focus timer](docs/media/focus.png) | ![Theme settings](docs/media/settings.png) |
 
-- Node.js matching `^22.18.0 || >=24.12.0` and npm. CI uses Node.js 24.
-- A browser with Web Locks support, served over HTTPS or a trusted local origin
-  such as localhost. Editing is disabled when safe ownership cannot be established.
+Screenshots and the [short onboarding recording](docs/media/onboarding.webm) show
+the local v1.1.0 candidate with sample data. The hosted demo may follow a different
+commit. [Capture details](docs/media/README.md).
 
-From the repository directory:
+## What you can do
+
+- **Organize tasks** — create, edit, complete, reorder with drag or keyboard, and
+  undo the latest deletion within ten seconds.
+- **Work with a timer** — start, pause, resume, reset, add time, and explicitly
+  complete tasks. Overtime can continue recording after the countdown reaches zero.
+- **Reuse familiar work** — inline title completion with Tab, remembered task
+  details, and editable duration suggestions from reliable completed sessions.
+- **Plan a session** — select tasks, set a time budget and breaks, review a proposal,
+  accept it, and recalculate the remaining schedule.
+- **Review your activity** — recorded focus time, daily activity, categories,
+  completions, and planned-versus-actual accuracy.
+- **Personalize your space** — Classic and Ember lighting, English and Russian.
+  Theme selection unlocks after the first task is created.
+- **Manage local data** — export recovery JSON, validate and import a backup, or
+  reset the workspace with confirmation. Imported running timers resume paused.
+
+Music and notifications currently have **In development** panels. Background
+music, notification sounds, and German localization are upcoming work.
+
+## Built with
+
+**Vue 3 · TypeScript · Pinia · Vite · SCSS**
+
+Vitest and Vue Test Utils cover domain and component behavior. Playwright covers
+Chromium workflows. ESLint, Oxlint, Prettier, and TypeScript run in GitHub Actions.
+
+## Run locally
+
+Use Node.js `^22.18.0 || >=24.12.0` and npm. CI uses Node.js 24.
 
 ```sh
 npm ci
 npm run dev
 ```
 
-Use the local URL printed by Vite.
-
-## Production build and preview
+Open the URL printed by Vite. Workspace editing requires Web Locks support and
+HTTPS or localhost.
 
 ```sh
 npm run build
 npm run preview
 ```
 
-The build runs TypeScript checking and generates static assets in `dist/`.
-Preview serves those assets locally; it is not a production deployment service.
+The build type-checks the application and writes static assets to `dist/`.
 
-## Testing and code quality
-
-Run the unit and component suite once:
+### Verify
 
 ```sh
 npm run test:unit -- --run
-```
-
-Use `npm run test:unit` for watch mode. Tests cover task operations, timers,
-estimation, planning, analytics, storage recovery, clock rollback, and ownership.
-
-Browser tests run against a production build using Vite preview on port 4173:
-
-```sh
-npx playwright install chromium
+npx eslint .
+npx oxlint .
+npx prettier --check .
 npm run build
+npx playwright install chromium
 npm run test:e2e
 ```
 
-On Linux, browser installation may require `npx playwright install --with-deps chromium`.
-The suite exercises task flows, restoration, and shared-storage ownership across
-tabs. See [the browser testing guide](src/e2e/README.md) for installation details,
-diagnostics, negative controls, and coverage limitations.
+On Linux, use `npx playwright install --with-deps chromium`. The E2E suite starts
+a production preview on port 4173. [Browser test guide](src/e2e/README.md).
 
-Additional checks:
+## Architecture and reliability
 
-```sh
-npm run type-check
-npm run lint
-npx prettier --check .
-```
+| Area                                               | Responsibility                                                |
+| -------------------------------------------------- | ------------------------------------------------------------- |
+| `src/components/`                                  | Task flows, timer, settings, planner, analytics, and lighting |
+| `src/stores/`                                      | Shared task, timer, history, planner, and ownership state     |
+| `src/planning.ts`, `estimation.ts`, `analytics.ts` | Scheduling and derived metrics                                |
+| `src/workspace.ts`, `workspaceOwnership.ts`        | Exclusive Web Lock and page lifecycle                         |
+| `src/persistence.ts`, `workspaceTransfer.ts`       | Validated storage, backup import, and reset                   |
+| `src/visuals/`, `src/assets/`, `src/i18n.ts`       | Motion helpers, styles, and translations                      |
 
-`npm run lint` runs Oxlint and ESLint with automatic fixes; ESLint also creates a
-cache. Review the resulting diff. `npm run format` rewrites formatting under `src/`.
+One cooperating tab owns workspace writes. Waiting tabs are read-only and hydrate
+the latest saved data before becoming editable. Storage validation protects
+recognized damaged data from overwrite. Detectable backward clock changes pause
+affected countdowns, and unreliable history is excluded from duration learning.
 
-## Continuous integration
+The interface includes keyboard controls, focus restoration, and reduced-motion
+handling. These affordances have automated coverage, with no claim of a formal
+accessibility audit. [Reliability details](RELIABILITY.md).
 
-[GitHub Actions](.github/workflows/ci.yml) runs on pull requests targeting `master`
-and pushes to `master`. It installs the locked dependencies, checks TypeScript,
-runs unit tests, ESLint, Oxlint, and Prettier, builds the application, then installs
-Chromium and runs browser smoke tests. Browser tests use two workers and no retries.
-Failure diagnostics are uploaded with seven-day retention.
+## Scope and limitations
 
-## Persistence and multi-tab safety
+- Data is local to this browser profile and origin. There is no cloud sync.
+  Clearing site data removes it, so export a backup before moving devices.
+- Storage keys are separate writes, without database transactions. Storage denial,
+  quota limits, and damaged backups can prevent saving or import.
+- The planner uses wall-clock time. Moving the clock backward can increase its
+  remaining budget. Review and recalculate after correcting system time.
+- Exact elapsed work cannot always be reconstructed across clock changes.
+- Automated browser coverage targets Chromium. Cross-browser, accessibility, and
+  broader visual reviews remain release work.
+- Close or reload older tabs when upgrading so every tab uses the ownership protocol.
 
-LocalStorage holds separate versioned keys for tasks/timer/focus history,
-remembered tasks, and planner state. Data belongs to the browser profile and origin;
-it is not synchronized between devices. Clearing site data removes it.
+Next priorities include background music, notification sounds, German localization,
+and broader browser/accessibility testing. [Development roadmap](ROADMAP.md).
 
-One tab holds an exclusive Web Lock and may edit the workspace. Other tabs wait in
-read-only mode. A newly opened waiting tab does not load the saved task list until
-it acquires ownership. The new owner reads all storage keys before enabling edits;
-the former owner cannot continue mutating or saving the workspace after release.
+## License and reuse
 
-Restoration validates stored data. Recognized corruption, including conflicting
-history records with the same identifier, protects the original raw workspace
-from overwrite. Storage errors are reported; do not assume unsaved changes survive
-a reload. If storage cannot be read safely, the workspace remains read-only.
+This repository is available for public viewing and portfolio review. No general
+license to use, modify, redistribute, or commercially reuse the project is granted.
+Separate permission from the copyright holder is required, subject to applicable
+law and GitHub's platform terms. Third-party dependencies retain their own licenses.
 
-Detectable backward clock changes pause affected running countdowns, preserve
-their recorded remaining time, and require explicit resume. Valid tasks and
-future-dated history are retained. Affected measurements remain unreliable and
-are excluded from adaptive estimates. Recovery writes remain subject to ownership
-and corruption protection.
+The intended copyright holder is Pavlo Marchenko, with the spelling pending
+confirmation against identity documents.
 
-## Accessibility and responsive behavior
-
-The interface includes labeled controls, visible keyboard focus, keyboard task
-reordering, Escape dismissal, and focus restoration for workspace panels. Analytics
-provide text values alongside charts. Styles adapt to narrow and short viewports,
-and the focus arc honors reduced-motion preferences.
-
-These are implemented affordances, not a claim of formal accessibility certification
-or exhaustive browser and viewport testing. The browser suite currently targets Chromium.
-
-## Known limitations
-
-- **Planner clock rollback (P2, non-blocking):** the planner's remaining session
-  budget still uses wall-clock time. Moving the clock backward can increase the
-  displayed available budget and affect recalculation. For example, a 30-minute
-  plan with 20 minutes left can show 30 minutes again. Review the schedule after
-  correcting system time. This is distinct from the fixed task-timer recovery,
-  which pauses detectable anomalous running countdowns rather than adding time.
-- Wall-clock timestamps cannot reconstruct true elapsed work across clock changes
-  or reloads. Small backward adjustments may be undetectable; uncertain focus
-  measurements are not treated as reliable learning samples.
-- The three storage keys are separate writes, not a database transaction. There
-  is no cloud sync or built-in backup/export workflow.
-- Tabs running older versions without the ownership protocol can still write.
-  Close or reload those tabs when upgrading.
-- Browser automation does not cover Firefox, Safari/WebKit, renderer crashes,
-  or exhaustive accessibility and visual regression checks.
-- Music, appearance customization, and AI planning described in the roadmap are
-  not part of v1.0.0.
-
-See [CHANGELOG.md](CHANGELOG.md) for the v1.0.0 release notes.
+See the [publication review](docs/release/FINAL-REVIEW.md) for asset provenance,
+dependency findings, and remaining release decisions.

@@ -1,5 +1,54 @@
 # Changelog
 
+## v1.1.0 — unreleased
+
+This entry covers changes after the v1.0.0 baseline and the current working-tree
+candidate. Package and lockfile versions are 1.1.0. Publication follows merge and release approval.
+
+### Added
+
+- Progressive first-task onboarding, inline title completion with Tab, and a
+  remembered-task picker inside the title field.
+- Classic and Ember lighting with animated transitions between workspace modes.
+- Settings sections for appearance, language, and data recovery, plus clearly
+  marked Music and Notifications placeholders.
+- English/Russian interface switching with a saved language preference.
+- Validated JSON backup import, export, and confirmed workspace reset.
+- Animated deletion notification with Undo and a countdown indicator.
+
+### Improved
+
+- Welcome composition, masked heading animations, and coordinated task-list arrival.
+- Task creation/editing presentation, glass controls, responsive task-list scrolling,
+  and initial-load stability.
+- Timer duration synchronization after task edits.
+- Chromium regression coverage for the progressive task workflow, settings,
+  localization, recovery, and multi-tab behavior.
+
+### Included in the working-tree candidate
+
+- A first-task hint leading to Start Focus, styled consistently with onboarding.
+- Saved empty workspaces return to the task list after reload.
+- Theme selection remains locked during onboarding, with a blurred overlay,
+  lock indicators, and localized guidance.
+
+### Release preparation
+
+- Versioned SVG favicon URL to refresh cached browser icons and exact FocusFlow tab title.
+- Independently constructed two-wave mark and removal of the unverified design collage.
+- Repository-local Git noreply identity for future commits.
+
+- Revised English README with actual UI screenshots and an onboarding recording.
+- Repository/history, dependency, asset, and license readiness review.
+- Public-viewing/no-general-license decision documented; earlier MIT proposal withdrawn.
+
+### Known limitations
+
+- Music, notification sounds, and German localization are upcoming.
+- Local-only persistence, separate storage writes, planner wall-clock rollback,
+  and Chromium-only E2E coverage remain limitations.
+- See the release readiness report for dependency warnings and publication blockers.
+
 ## v1.0.0
 
 Initial versioned release preparation for FocusFlow. This entry describes the
