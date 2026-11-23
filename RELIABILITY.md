@@ -47,6 +47,19 @@ never overwrite an original damaged snapshot with a partial recovered copy.
 An exported file contains private task names and history; keep it locally or share
 it deliberately. Blob URLs are revoked after the browser has consumed the download.
 
+## Settings backup import and reset
+
+Settings can export the recovery envelope and import its validated current snapshot.
+Import checks tasks, timer, focus history, remembered entries, planner data, theme,
+and optional language before requesting confirmation. Imported running timers become
+paused. Damaged or incomplete current snapshots are rejected even when raw stored
+strings are present. Raw historical strings are retained for manual recovery.
+
+Reset and import require the active writable tab and explicit confirmation.
+Replacement stops persistence, updates only FocusFlow keys, and reloads the page.
+A write error attempts to restore previous values. LocalStorage offers no cross-key
+transaction, so storage failures can also prevent rollback. Keep exported backups.
+
 ## CSP and deployment
 
 Vite adds a CSP meta tag only to production builds, before resource declarations.

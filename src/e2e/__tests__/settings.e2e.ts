@@ -3,6 +3,32 @@ import { readFile } from 'node:fs/promises'
 import { STORAGE_KEY } from '../../persistence'
 import { addTask } from './browserHelpers'
 
+test('themes unlock only after the first task is saved', async ({ page }) => {
+  await page.goto('/')
+  const settings = page.getByRole('button', { name: 'Settings', exact: true })
+  const ember = page.getByRole('radio', { name: 'Ember', exact: true })
+  await settings.click()
+  await expect(ember).toBeDisabled()
+  await expect(page.getByText('Finish creating your first task to unlock themes.')).toBeVisible()
+  await page.keyboard.press('Escape')
+  const title = page.getByRole('textbox', { name: 'Task title', exact: true })
+  await title.fill('Unlock appearance')
+  await title.press('Enter')
+  await expect(page.getByRole('spinbutton', { name: 'Estimated minutes' })).toBeFocused()
+  await settings.click()
+  await expect(ember).toBeDisabled()
+  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: 'Add task', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Focus on Unlock appearance' })).toBeVisible()
+  await settings.click()
+  await expect(ember).toBeEnabled()
+  await ember.check()
+  await page.reload()
+  await settings.click()
+  await expect(ember).toBeEnabled()
+  await expect(ember).toBeChecked()
+})
+
 test('backup import validates files and destructive actions require confirmation', async ({
   page,
 }) => {

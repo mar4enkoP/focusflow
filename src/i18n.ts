@@ -18,6 +18,9 @@ export function setLanguage(value: Language) {
   }
 }
 const ru: Record<string, string> = {
+  'Themes locked': 'Выбор тем заблокирован',
+  'Finish creating your first task to unlock themes.':
+    'Завершите создание первой задачи, чтобы открыть выбор тем.',
   'Could not restore the workspace. Saved data is preserved.':
     'Не удалось восстановить рабочее пространство. Сохранённые данные не изменены.',
   'Some focus history is damaged. Valid data is restored; saved data is preserved.':

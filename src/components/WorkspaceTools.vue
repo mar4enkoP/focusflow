@@ -1,4 +1,5 @@
 <script setup lang="ts">
+defineProps<{ themeLocked?: boolean }>()
 import { t } from '@/i18n'
 import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import SettingsPanel from './SettingsPanel.vue'
@@ -142,7 +143,7 @@ function showTasks() {
       </div>
       <SessionPlanner v-if="opened === 'Planner'" @focus="focus" />
       <ProductivityAnalytics v-else-if="opened === 'Analytics'" />
-      <SettingsPanel v-else v-model:section="settingsSection" />
+      <SettingsPanel :theme-locked="themeLocked" v-else v-model:section="settingsSection" />
     </div>
     <button
       v-if="opened !== 'Settings'"

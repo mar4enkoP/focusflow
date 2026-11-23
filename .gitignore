@@ -41,3 +41,9 @@ __screenshots__/
 # Playwright
 /playwright-report/
 /test-results/
+
+# Local assistant attachments
+.codex-remote-attachments/
+
+# Raw browser capture intermediates
+docs/media/raw/

@@ -155,6 +155,10 @@ test('missing Web Locks fails closed without uncoordinated writes', async ({ con
 test('task editing, reordering, timer pause/reload, completion and memory still work', async ({
   page,
 }) => {
+  // This long workflow checks persisted behavior, not transition timing. Exercise
+  // the supported reduced-motion path so animation waits do not consume its budget.
+  // Normal-motion onboarding and transitions remain covered by welcome.e2e.ts.
+  await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.goto('/')
   await addTask(page, 'First')
   await addTask(page, 'Second')

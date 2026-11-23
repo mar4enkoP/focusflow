@@ -1,6 +1,7 @@
 ﻿<script setup lang="ts">
 defineProps<{ name: string }>()
 const paths: Record<string, string> = {
+  lock: 'M7 10V7a5 5 0 0 1 10 0v3M5 10h14v11H5zM12 14v3',
   language: 'M3 5h12M9 3v2M6 5c0 6 3 9 7 11M13 5c0 6-4 10-9 12M13 21l4-11 4 11m-6-4h4',
   database: 'M20 5c0 4-16 4-16 0s16-4 16 0v14c0 4-16 4-16 0V5m0 7c0 4 16 4 16 0',
   music: 'M9 18V5l12-2v13M9 8l12-2M9 18a3 3 0 1 1-3-3h3m12 1a3 3 0 1 1-3-3h3',
@@ -18,7 +19,7 @@ const paths: Record<string, string> = {
   arrow: 'M4 12h16m-6-6 6 6-6 6',
   list: 'M9 6h12M9 12h12M9 18h12M3 6h1m-1 6h1m-1 6h1',
   clock: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18m0 4v5l3 2',
-  brand: 'M2 9c6-12 10 12 20 0M2 16c6-12 10 12 20 0',
+  brand: 'M2 9C5 3 9 3 12 9S19 15 22 9M2 16C5 10 9 10 12 16S19 22 22 16',
   reset: 'M8 4v5H3 M8 5a8 8 0 1 1-4 8',
   play: 'm8 4 12 8-12 8Z',
   pause: 'M6 4h4v16H6z M14 4h4v16h-4z',

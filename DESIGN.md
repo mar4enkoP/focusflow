@@ -2,10 +2,7 @@
 
 ## Reference and intent
 
-Use [references/focusflow-design.png](references/focusflow-design.png) as the primary
-visual reference. It depicts six separate states: task creation, focus, task management,
-music, appearance, and statistics. Translate them into one full-viewport application
-with contextual floating panels. Never reproduce the image as a six-panel collage.
+Use the running application and [current UI captures](docs/media/README.md) as the visual reference. The earlier external design collage was removed because its source and redistribution terms could not be established.
 
 The product should feel like a premium, calm, minimalist desktop productivity tool.
 Optimize first for 1440×900 and 1920×1080 screens. Avoid tablet-sized controls,

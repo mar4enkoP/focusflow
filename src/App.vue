@@ -242,6 +242,7 @@ function save(input: TaskInput) {
         ><AppIcon name="brand" />{{ t('FocusFlow') }}</a
       >
       <WorkspaceTools
+        :theme-locked="welcome"
         :key="access.generation + String(access.canEdit)"
         @focus="focus"
         @active="

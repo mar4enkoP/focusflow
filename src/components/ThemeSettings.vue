@@ -1,4 +1,6 @@
 <script setup lang="ts">
+defineProps<{ themeLocked?: boolean }>()
+import AppIcon from './AppIcon.vue'
 import { t } from '@/i18n'
 import { useId } from 'vue'
 import { useAppearanceStore } from '@/stores/appearance'
@@ -7,73 +9,125 @@ const appearance = useAppearanceStore()
 </script>
 
 <template>
-  <fieldset class="theme-options">
-    <legend class="sr-only">{{ t('Lighting') }}</legend>
-    <label v-for="option in ['2', '1'] as const" :key="option" class="theme-option">
-      <input
-        type="radio"
-        name="light-theme"
-        :value="option"
-        :aria-label="t(option === '2' ? 'Classic' : 'Ember')"
-        :checked="appearance.theme === option"
-        @change="appearance.selectTheme(option)"
-      />
-      <span class="theme-card">
-        <span class="theme-preview" :data-theme="option" aria-hidden="true">
-          <svg viewBox="0 0 200 120" fill="none">
-            <defs>
-              <linearGradient
-                :id="id + option"
-                gradientUnits="userSpaceOnUse"
-                x1="10"
-                y1="0"
-                x2="190"
-                y2="0"
-              >
-                <stop stop-color="#ef3340" stop-opacity="0" />
-                <stop offset=".3" stop-color="#ff6736" />
-                <stop offset=".55" stop-color="#ffe2a8" />
-                <stop offset=".8" stop-color="#ff7635" />
-                <stop offset="1" stop-color="#ef3340" stop-opacity="0" />
-              </linearGradient>
-            </defs>
-            <g :stroke="`url(#${id + option})`">
-              <path
-                class="preview-glow"
-                :d="option === '1' ? 'M10 84H190' : 'M18 44C25 104 161 110 182 34'"
-              />
-              <path
-                class="preview-core"
-                :d="option === '1' ? 'M10 84H190' : 'M18 44C25 104 161 110 182 34'"
-              />
-            </g>
-          </svg>
+  <div class="theme-choice">
+    <div v-if="themeLocked" class="theme-lock" :aria-label="t('Themes locked')">
+      <span class="lock-message"><AppIcon name="lock" />{{ t('Themes locked') }}</span>
+    </div>
+    <fieldset
+      class="theme-options"
+      :disabled="themeLocked"
+      :aria-describedby="themeLocked ? id + '-lock' : undefined"
+    >
+      <legend class="sr-only">{{ t('Lighting') }}</legend>
+      <label v-for="option in ['2', '1'] as const" :key="option" class="theme-option">
+        <input
+          type="radio"
+          name="light-theme"
+          :value="option"
+          :aria-label="t(option === '2' ? 'Classic' : 'Ember')"
+          :checked="appearance.theme === option"
+          @change="appearance.selectTheme(option)"
+        />
+        <span class="theme-card">
+          <span class="theme-preview" :data-theme="option" aria-hidden="true">
+            <svg viewBox="0 0 200 120" fill="none">
+              <defs>
+                <linearGradient
+                  :id="id + option"
+                  gradientUnits="userSpaceOnUse"
+                  x1="10"
+                  y1="0"
+                  x2="190"
+                  y2="0"
+                >
+                  <stop stop-color="#ef3340" stop-opacity="0" />
+                  <stop offset=".3" stop-color="#ff6736" />
+                  <stop offset=".55" stop-color="#ffe2a8" />
+                  <stop offset=".8" stop-color="#ff7635" />
+                  <stop offset="1" stop-color="#ef3340" stop-opacity="0" />
+                </linearGradient>
+              </defs>
+              <g :stroke="`url(#${id + option})`">
+                <path
+                  class="preview-glow"
+                  :d="option === '1' ? 'M10 84H190' : 'M18 44C25 104 161 110 182 34'"
+                />
+                <path
+                  class="preview-core"
+                  :d="option === '1' ? 'M10 84H190' : 'M18 44C25 104 161 110 182 34'"
+                />
+              </g>
+            </svg>
+          </span>
+          <span class="theme-label"
+            >{{ t(option === '2' ? 'Classic' : 'Ember')
+            }}<span class="selection" aria-hidden="true">
+              <template v-if="appearance.theme === option">
+                <span v-if="appearance.applying" class="applying"
+                  >{{ t('Applying') }}<span class="progress"
+                /></span>
+                <span v-else class="applied">{{ t('✓ Active') }}</span>
+              </template>
+            </span></span
+          >
         </span>
-        <span class="theme-label"
-          >{{ t(option === '2' ? 'Classic' : 'Ember')
-          }}<span class="selection" aria-hidden="true">
-            <template v-if="appearance.theme === option">
-              <span v-if="appearance.applying" class="applying"
-                >{{ t('Applying') }}<span class="progress"
-              /></span>
-              <span v-else class="applied">{{ t('✓ Active') }}</span>
-            </template>
-          </span></span
-        >
-      </span>
-    </label>
-  </fieldset>
-  <p class="theme-hint" role="status">
+      </label>
+    </fieldset>
+  </div>
+  <p v-if="themeLocked" :id="id + '-lock'" class="theme-hint" role="status">
+    {{ t('Finish creating your first task to unlock themes.') }}
+  </p>
+  <p v-else class="theme-hint" role="status">
     {{ t(appearance.applying ? 'Applying your light…' : 'Your theme is saved on this device.') }}
   </p>
   <p v-if="appearance.notice" class="theme-notice" role="status">{{ t(appearance.notice) }}</p>
 </template>
 
 <style scoped lang="scss">
+.theme-choice {
+  position: relative;
+  margin-top: 20px;
+  isolation: isolate;
+}
+.theme-lock {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: var(--text);
+  background: rgb(18 16 20 / 22%);
+  border: 1px solid #ffffff14;
+  backdrop-filter: blur(5px);
+  box-shadow: inset 0 1px 0 #ffffff08;
+  cursor: not-allowed;
+}
+.lock-message {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+  svg {
+    width: 15px;
+    height: 15px;
+  }
+}
+.theme-options:disabled {
+  .theme-card {
+    opacity: 0.5;
+  }
+  input,
+  .theme-option {
+    cursor: not-allowed;
+  }
+}
 .theme-options {
   border: 0;
   padding: 0;
-  margin: 20px 0 0;
+  margin: 0;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
