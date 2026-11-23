@@ -18,9 +18,12 @@ for (const viewport of [
     await expect(page.locator('form')).toHaveClass(/is-compact/)
     await expect(page.getByLabel('Estimated minutes')).toBeHidden()
     await title.fill('Write the first page')
+    // Focus and editability can change before the scene and title transitions settle.
+    await expect(page.locator('.creation')).toHaveCSS('transform', 'none')
     const before = await title.boundingBox()
     await title.press('Enter')
     await expect(page.getByLabel('Estimated minutes')).toBeFocused()
+    await expect(page.locator('.title-stage')).toHaveCSS('transform', 'none')
     const after = await title.boundingBox()
     expect(after!.y).toBeLessThanOrEqual(before!.y - 50)
     await expect(title).toHaveValue('Write the first page')
